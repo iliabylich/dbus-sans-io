@@ -11,6 +11,37 @@ const MESSAGE_TYPE_SIGNAL: u8 = 4;
 const NO_REPLY_EXPECTED: u8 = 0x1;
 const NO_AUTO_START: u8 = 0x2;
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+enum HeaderField {
+    Path = 1,
+    Interface = 2,
+    Member = 3,
+    ErrorName = 4,
+    ReplySerial = 5,
+    Destination = 6,
+    Sender = 7,
+    Signature = 8,
+}
+
+impl TryFrom<u8> for HeaderField {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(HeaderField::Path),
+            2 => Ok(HeaderField::Interface),
+            3 => Ok(HeaderField::Member),
+            4 => Ok(HeaderField::ErrorName),
+            5 => Ok(HeaderField::ReplySerial),
+            6 => Ok(HeaderField::Destination),
+            7 => Ok(HeaderField::Sender),
+            8 => Ok(HeaderField::Signature),
+            _ => Err(value),
+        }
+    }
+}
+
 struct Message {
     msg_type: u8,
     flags: u8,
@@ -79,9 +110,9 @@ impl MessageBuilder {
         }
     }
 
-    fn add_string_field(&mut self, field_code: u8, value: &[u8]) {
+    fn add_string_field(&mut self, field: HeaderField, value: &[u8]) {
         self.align_to(8);
-        self.data.push(field_code);
+        self.data.push(field as u8);
         self.data.push(1); // signature length
         self.data.push(b's');
         self.data.push(0); // null terminator for signature
@@ -91,9 +122,9 @@ impl MessageBuilder {
         self.data.push(0); // null terminator for string
     }
 
-    fn add_object_path_field(&mut self, field_code: u8, value: &[u8]) {
+    fn add_object_path_field(&mut self, field: HeaderField, value: &[u8]) {
         self.align_to(8);
-        self.data.push(field_code);
+        self.data.push(field as u8);
         self.data.push(1);
         self.data.push(b'o');
         self.data.push(0);
@@ -188,10 +219,10 @@ impl Connection {
 
     fn send_hello(&mut self) -> u32 {
         let mut msg = MessageBuilder::new(MESSAGE_TYPE_METHOD_CALL, 0, 0);
-        msg.add_object_path_field(1, b"/org/freedesktop/DBus");
-        msg.add_string_field(6, b"org.freedesktop.DBus"); // DESTINATION
-        msg.add_string_field(2, b"org.freedesktop.DBus"); // INTERFACE
-        msg.add_string_field(3, b"Hello"); // MEMBER
+        msg.add_object_path_field(HeaderField::Path, b"/org/freedesktop/DBus");
+        msg.add_string_field(HeaderField::Destination, b"org.freedesktop.DBus");
+        msg.add_string_field(HeaderField::Interface, b"org.freedesktop.DBus");
+        msg.add_string_field(HeaderField::Member, b"Hello");
 
         self.send_message(msg)
     }
@@ -242,14 +273,17 @@ impl Connection {
                         header_fields[pos + 3],
                     ]) as usize;
                     pos += 4;
-                    let value = String::from_utf8_lossy(&header_fields[pos..pos + str_len]).into_owned();
+                    let value =
+                        String::from_utf8_lossy(&header_fields[pos..pos + str_len]).into_owned();
                     pos += str_len + 1; // +1 for null terminator
 
-                    match field_code {
-                        1 => path = Some(value),      // PATH
-                        2 => interface = Some(value), // INTERFACE
-                        3 => member = Some(value),    // MEMBER
-                        _ => {}
+                    if let Ok(field) = HeaderField::try_from(field_code) {
+                        match field {
+                            HeaderField::Path => path = Some(value),
+                            HeaderField::Interface => interface = Some(value),
+                            HeaderField::Member => member = Some(value),
+                            _ => {}
+                        }
                     }
                 }
                 _ => break, // Skip unknown signatures for now
@@ -323,5 +357,7 @@ fn main() {
             let signal_arg = msg.body.read_str();
             println!("  Signal argument: {}", signal_arg);
         }
+
+        return;
     }
 }
