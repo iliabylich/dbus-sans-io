@@ -1,15 +1,31 @@
+use anyhow::{Context as _, Result, bail};
 use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
 };
 
-const LITTLE_ENDIAN: u8 = b'l';
-const MESSAGE_TYPE_METHOD_CALL: u8 = 1;
-const MESSAGE_TYPE_METHOD_RETURN: u8 = 2;
-const MESSAGE_TYPE_ERROR: u8 = 3;
-const MESSAGE_TYPE_SIGNAL: u8 = 4;
-const NO_REPLY_EXPECTED: u8 = 0x1;
-const NO_AUTO_START: u8 = 0x2;
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MessageType {
+    MethodCall = 1,
+    MethodReturn = 2,
+    Error = 3,
+    Signal = 4,
+}
+
+impl TryFrom<u8> for MessageType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            1 => Ok(Self::MethodCall),
+            2 => Ok(Self::MethodReturn),
+            3 => Ok(Self::Error),
+            4 => Ok(Self::Signal),
+            _ => bail!("unknown message type {value}"),
+        }
+    }
+}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
@@ -25,31 +41,72 @@ enum HeaderField {
 }
 
 impl TryFrom<u8> for HeaderField {
-    type Error = u8;
+    type Error = anyhow::Error;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u8) -> Result<Self> {
         match value {
-            1 => Ok(HeaderField::Path),
-            2 => Ok(HeaderField::Interface),
-            3 => Ok(HeaderField::Member),
-            4 => Ok(HeaderField::ErrorName),
-            5 => Ok(HeaderField::ReplySerial),
-            6 => Ok(HeaderField::Destination),
-            7 => Ok(HeaderField::Sender),
-            8 => Ok(HeaderField::Signature),
-            _ => Err(value),
+            1 => Ok(Self::Path),
+            2 => Ok(Self::Interface),
+            3 => Ok(Self::Member),
+            4 => Ok(Self::ErrorName),
+            5 => Ok(Self::ReplySerial),
+            6 => Ok(Self::Destination),
+            7 => Ok(Self::Sender),
+            8 => Ok(Self::Signature),
+            _ => bail!("unknown header field type {value}"),
         }
     }
 }
 
 struct Message {
-    msg_type: u8,
+    message_type: MessageType,
     flags: u8,
     serial: u32,
     member: Option<String>,
     interface: Option<String>,
     path: Option<String>,
     body: MessageBody,
+}
+
+enum ReadResult<T> {
+    Finished(T),
+    WouldBlock,
+}
+
+struct FixedSizeReader<const N: usize> {
+    buf: [u8; N],
+    pos: usize,
+}
+
+impl<const N: usize> FixedSizeReader<N> {
+    fn new() -> Self {
+        Self {
+            buf: [0; N],
+            pos: 0,
+        }
+    }
+
+    fn continue_reading(&mut self, r: &mut impl Read) -> Result<ReadResult<()>> {
+        loop {
+            match r.read(&mut self.buf[self.pos..]) {
+                Ok(len) => {
+                    self.pos += len;
+                    if self.pos == N {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        return Ok(ReadResult::WouldBlock);
+                    } else {
+                        return Err(err.into());
+                    }
+                }
+            }
+        }
+
+        Ok(ReadResult::Finished(()))
+    }
 }
 
 struct MessageBody {
@@ -62,23 +119,28 @@ impl MessageBody {
         Self { data, pos: 0 }
     }
 
-    fn read_u32(&mut self) -> u32 {
-        let value = u32::from_le_bytes([
-            self.data[self.pos],
-            self.data[self.pos + 1],
-            self.data[self.pos + 2],
-            self.data[self.pos + 3],
-        ]);
-        self.pos += 4;
-        value
+    fn read_u8(&mut self) -> Result<u8> {
+        let byte = self.data.get(self.pos).copied().context("EOF")?;
+        self.pos += 1;
+        Ok(byte)
     }
 
-    fn read_str(&mut self) -> &str {
-        let len = self.read_u32() as usize;
+    fn read_u32(&mut self) -> Result<u32> {
+        let value = u32::from_le_bytes([
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?,
+        ]);
+        Ok(value)
+    }
+
+    fn read_str(&mut self) -> Result<&str> {
+        let len = self.read_u32()? as usize;
         let s = std::str::from_utf8(&self.data[self.pos..self.pos + len])
             .expect("invalid UTF-8 in string");
         self.pos += len + 1; // +1 for null terminator
-        s
+        Ok(s)
     }
 }
 
@@ -87,72 +149,123 @@ struct MessageBuilder {
 }
 
 impl MessageBuilder {
-    fn new(msg_type: u8, flags: u8, body_length: u32) -> Self {
+    const LITTLE_ENDIAN: u8 = b'l';
+    const PROTOCOL_VERSION: u8 = 1;
+
+    fn new(message_type: MessageType, flags: u8, body_len: u32) -> Self {
         let mut header = Vec::new();
-        header.push(LITTLE_ENDIAN);
-        header.push(msg_type);
+        header.push(Self::LITTLE_ENDIAN);
+        header.push(message_type as u8);
         header.push(flags);
-        header.push(1); // protocol version
-        header.extend_from_slice(&body_length.to_le_bytes());
+        header.push(Self::PROTOCOL_VERSION);
+        header.extend_from_slice(&body_len.to_le_bytes());
         header.extend_from_slice(&0u32.to_le_bytes()); // serial placeholder
+        header.extend_from_slice(&0u32.to_le_bytes()); // length placeholder
 
         Self { data: header }
     }
 
-    fn align_to(&mut self, alignment: usize) {
-        // After finalize, there will be 16 bytes before our data (12 byte header + 4 byte array length)
-        // So absolute position will be: 16 + (self.data.len() - 12)
-        let fields_len = self.data.len() - 12;
-        let absolute_pos = 16 + fields_len;
-        let padding = (alignment - (absolute_pos % alignment)) % alignment;
-        for _ in 0..padding {
+    fn push_u32(&mut self, n: u32) {
+        self.data.extend_from_slice(&n.to_le_bytes());
+    }
+
+    fn push_binary_string(&mut self, s: &[u8]) {
+        self.push_u32(s.len() as u32);
+        self.data.extend_from_slice(s);
+        self.data.push(0); // NULL EOS
+    }
+
+    fn push_signature(&mut self, sig: &[u8]) {
+        self.data.push(sig.len() as u8);
+        self.data.extend_from_slice(sig);
+        self.data.push(0); // NULL EOS
+    }
+
+    fn align(&mut self) {
+        while self.data.len() % 8 != 0 {
             self.data.push(0);
         }
     }
 
     fn add_string_field(&mut self, field: HeaderField, value: &[u8]) {
-        self.align_to(8);
+        self.align();
         self.data.push(field as u8);
-        self.data.push(1); // signature length
-        self.data.push(b's');
-        self.data.push(0); // null terminator for signature
-        self.data
-            .extend_from_slice(&(value.len() as u32).to_le_bytes());
-        self.data.extend_from_slice(value);
-        self.data.push(0); // null terminator for string
+        self.push_signature(b"s");
+        self.push_binary_string(value);
     }
 
     fn add_object_path_field(&mut self, field: HeaderField, value: &[u8]) {
-        self.align_to(8);
+        self.align();
         self.data.push(field as u8);
-        self.data.push(1);
-        self.data.push(b'o');
-        self.data.push(0);
-        self.data
-            .extend_from_slice(&(value.len() as u32).to_le_bytes());
-        self.data.extend_from_slice(value);
-        self.data.push(0);
+        self.push_signature(b"o");
+        self.push_binary_string(value);
     }
 
     fn finalize(mut self, serial: u32) -> Vec<u8> {
-        // Update the serial number
         self.data[8..12].copy_from_slice(&serial.to_le_bytes());
+        let len = (self.data.len() - 16) as u32;
+        self.data[12..16].copy_from_slice(&len.to_le_bytes());
+        self.align();
 
-        // Calculate header fields array length (everything after the fixed 12-byte header)
-        let header_fields_len = (self.data.len() - 12) as u32;
+        self.data
+    }
+}
 
-        // Insert the header fields array length at position 12
-        let mut result = Vec::new();
-        result.extend_from_slice(&self.data[..12]); // Fixed header
-        result.extend_from_slice(&header_fields_len.to_le_bytes()); // Array length
-        result.extend_from_slice(&self.data[12..]); // Header fields
+enum HeaderReader {
+    Pending { inner: FixedSizeReader<16> },
+    Done { header: [u8; 16] },
+}
 
-        // Align to 8-byte boundary before body
-        while result.len() % 8 != 0 {
-            result.push(0);
+impl HeaderReader {
+    fn new() -> Self {
+        Self::Pending {
+            inner: FixedSizeReader::new(),
         }
+    }
 
-        result
+    fn continue_reading(&mut self, r: &mut impl Read) -> Result<ReadResult<()>> {
+        match self {
+            Self::Pending { inner } => match inner.continue_reading(r)? {
+                ReadResult::Finished(_) => {
+                    *self = Self::Done { header: inner.buf };
+                    Ok(ReadResult::Finished(()))
+                }
+                ReadResult::WouldBlock => Ok(ReadResult::WouldBlock),
+            },
+            Self::Done { .. } => bail!("already done reading"),
+        }
+    }
+
+    fn data(&self) -> Result<&[u8; 16]> {
+        let Self::Done { header } = self else {
+            bail!("haven't read yet")
+        };
+        Ok(header)
+    }
+
+    fn message_type(&self) -> Result<MessageType> {
+        let data = self.data()?;
+        MessageType::try_from(data[1])
+    }
+
+    fn flags(&self) -> Result<u8> {
+        let data = self.data()?;
+        Ok(data[2])
+    }
+
+    fn body_len(&self) -> Result<u32> {
+        let data = self.data()?;
+        Ok(u32::from_le_bytes([data[4], data[5], data[6], data[7]]))
+    }
+
+    fn serial(&self) -> Result<u32> {
+        let data = self.data()?;
+        Ok(u32::from_le_bytes([data[8], data[9], data[10], data[11]]))
+    }
+
+    fn headers_len(&self) -> Result<u32> {
+        let data = self.data()?;
+        Ok(u32::from_le_bytes([data[12], data[13], data[14], data[15]]))
     }
 }
 
@@ -218,7 +331,7 @@ impl Connection {
     }
 
     fn send_hello(&mut self) -> u32 {
-        let mut msg = MessageBuilder::new(MESSAGE_TYPE_METHOD_CALL, 0, 0);
+        let mut msg = MessageBuilder::new(MessageType::MethodCall, 0, 0);
         msg.add_object_path_field(HeaderField::Path, b"/org/freedesktop/DBus");
         msg.add_string_field(HeaderField::Destination, b"org.freedesktop.DBus");
         msg.add_string_field(HeaderField::Interface, b"org.freedesktop.DBus");
@@ -227,19 +340,18 @@ impl Connection {
         self.send_message(msg)
     }
 
-    fn read_message(&mut self) -> Message {
-        let mut header = [0u8; 16];
-        self.read_exact(&mut header);
+    fn read_message(&mut self) -> Result<Message> {
+        let mut header = HeaderReader::new();
+        header.continue_reading(&mut self.stream)?;
 
-        let msg_type = header[1];
-        let flags = header[2];
-        let body_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
-        let serial = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
-        let header_fields_len =
-            u32::from_le_bytes([header[12], header[13], header[14], header[15]]);
+        let message_type = header.message_type()?;
+        let flags = header.flags()?;
+        let body_len = header.body_len()?;
+        let serial = header.serial()?;
+        let headers_len = header.headers_len()?;
 
-        let mut header_fields = vec![0u8; header_fields_len as usize];
-        self.read_exact(&mut header_fields);
+        let mut header_fields = vec![0u8; headers_len as usize];
+        self.read_binary(&mut header_fields);
 
         // Parse header fields
         let mut member = None;
@@ -291,34 +403,26 @@ impl Connection {
         }
 
         // Skip padding to 8-byte boundary
-        let padding = (8 - ((16 + header_fields_len as usize) % 8)) % 8;
+        let padding = (8 - ((16 + headers_len as usize) % 8)) % 8;
         if padding > 0 {
             let mut pad = [0u8; 7];
-            self.read_exact(&mut pad[..padding]);
+            self.read_binary(&mut pad[..padding]);
         }
 
-        let mut body = vec![0u8; body_length as usize];
-        if body_length > 0 {
-            self.read_exact(&mut body);
+        let mut body = vec![0u8; body_len as usize];
+        if body_len > 0 {
+            self.read_binary(&mut body);
         }
 
-        Message {
-            msg_type,
+        Ok(Message {
+            message_type,
             flags,
             serial,
             member,
             interface,
             path,
             body: MessageBody::new(body),
-        }
-    }
-
-    fn read_exact(&mut self, buf: &mut [u8]) {
-        let mut total = 0;
-        while total < buf.len() {
-            let n = self.read_binary(&mut buf[total..]);
-            total += n;
-        }
+        })
     }
 }
 
@@ -329,22 +433,15 @@ fn main() {
     let hello_serial = dbus.send_hello();
     println!("Sent Hello with serial {}", hello_serial);
 
-    let mut msg = dbus.read_message();
-    let unique_name = msg.body.read_str();
+    let mut msg = dbus.read_message().unwrap();
+    let unique_name = msg.body.read_str().unwrap();
     println!("Our unique bus name: {}", unique_name);
 
     println!("\nWaiting for more messages...");
     loop {
-        let mut msg = dbus.read_message();
-        let msg_type_str = match msg.msg_type {
-            MESSAGE_TYPE_METHOD_CALL => "METHOD_CALL",
-            MESSAGE_TYPE_METHOD_RETURN => "METHOD_RETURN",
-            MESSAGE_TYPE_ERROR => "ERROR",
-            MESSAGE_TYPE_SIGNAL => "SIGNAL",
-            _ => "UNKNOWN",
-        };
+        let mut msg = dbus.read_message().unwrap();
 
-        print!("Received {}", msg_type_str);
+        print!("Received {:?}", msg.message_type);
         if let Some(ref member) = msg.member {
             print!(" {}", member);
         }
@@ -353,8 +450,8 @@ fn main() {
         }
         println!(" serial={}, body_len={}", msg.serial, msg.body.data.len());
 
-        if msg.msg_type == MESSAGE_TYPE_SIGNAL && msg.body.data.len() > 0 {
-            let signal_arg = msg.body.read_str();
+        if msg.message_type == MessageType::Signal && msg.body.data.len() > 0 {
+            let signal_arg = msg.body.read_str().unwrap();
             println!("  Signal argument: {}", signal_arg);
         }
 
