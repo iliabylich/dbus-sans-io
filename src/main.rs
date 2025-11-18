@@ -5,8 +5,21 @@ use std::{
 
 const LITTLE_ENDIAN: u8 = b'l';
 const MESSAGE_TYPE_METHOD_CALL: u8 = 1;
+const MESSAGE_TYPE_METHOD_RETURN: u8 = 2;
+const MESSAGE_TYPE_ERROR: u8 = 3;
+const MESSAGE_TYPE_SIGNAL: u8 = 4;
 const NO_REPLY_EXPECTED: u8 = 0x1;
 const NO_AUTO_START: u8 = 0x2;
+
+struct Message {
+    msg_type: u8,
+    flags: u8,
+    serial: u32,
+    member: Option<String>,
+    interface: Option<String>,
+    path: Option<String>,
+    body: MessageBody,
+}
 
 struct MessageBody {
     data: Vec<u8>,
@@ -183,22 +196,65 @@ impl Connection {
         self.send_message(msg)
     }
 
-    fn read_message(&mut self) -> MessageBody {
+    fn read_message(&mut self) -> Message {
         let mut header = [0u8; 16];
         self.read_exact(&mut header);
 
+        let msg_type = header[1];
+        let flags = header[2];
         let body_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
         let serial = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
         let header_fields_len =
             u32::from_le_bytes([header[12], header[13], header[14], header[15]]);
 
-        println!(
-            "Message: type={}, flags={}, body_len={}, serial={}, header_fields_len={}",
-            header[1], header[2], body_length, serial, header_fields_len
-        );
-
         let mut header_fields = vec![0u8; header_fields_len as usize];
         self.read_exact(&mut header_fields);
+
+        // Parse header fields
+        let mut member = None;
+        let mut interface = None;
+        let mut path = None;
+        let mut pos = 0;
+        while pos < header_fields.len() {
+            // Align to 8-byte boundary from message start
+            let absolute_pos = 16 + pos;
+            let padding = (8 - (absolute_pos % 8)) % 8;
+            pos += padding;
+
+            if pos >= header_fields.len() {
+                break;
+            }
+
+            let field_code = header_fields[pos];
+            pos += 1;
+            let sig_len = header_fields[pos];
+            pos += 1;
+            let signature = header_fields[pos];
+            pos += 1;
+            pos += 1; // skip signature null terminator
+
+            match signature {
+                b's' | b'o' => {
+                    let str_len = u32::from_le_bytes([
+                        header_fields[pos],
+                        header_fields[pos + 1],
+                        header_fields[pos + 2],
+                        header_fields[pos + 3],
+                    ]) as usize;
+                    pos += 4;
+                    let value = String::from_utf8_lossy(&header_fields[pos..pos + str_len]).into_owned();
+                    pos += str_len + 1; // +1 for null terminator
+
+                    match field_code {
+                        1 => path = Some(value),      // PATH
+                        2 => interface = Some(value), // INTERFACE
+                        3 => member = Some(value),    // MEMBER
+                        _ => {}
+                    }
+                }
+                _ => break, // Skip unknown signatures for now
+            }
+        }
 
         // Skip padding to 8-byte boundary
         let padding = (8 - ((16 + header_fields_len as usize) % 8)) % 8;
@@ -212,7 +268,15 @@ impl Connection {
             self.read_exact(&mut body);
         }
 
-        MessageBody::new(body)
+        Message {
+            msg_type,
+            flags,
+            serial,
+            member,
+            interface,
+            path,
+            body: MessageBody::new(body),
+        }
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) {
@@ -231,7 +295,33 @@ fn main() {
     let hello_serial = dbus.send_hello();
     println!("Sent Hello with serial {}", hello_serial);
 
-    let mut body = dbus.read_message();
-    let unique_name = body.read_str();
+    let mut msg = dbus.read_message();
+    let unique_name = msg.body.read_str();
     println!("Our unique bus name: {}", unique_name);
+
+    println!("\nWaiting for more messages...");
+    loop {
+        let mut msg = dbus.read_message();
+        let msg_type_str = match msg.msg_type {
+            MESSAGE_TYPE_METHOD_CALL => "METHOD_CALL",
+            MESSAGE_TYPE_METHOD_RETURN => "METHOD_RETURN",
+            MESSAGE_TYPE_ERROR => "ERROR",
+            MESSAGE_TYPE_SIGNAL => "SIGNAL",
+            _ => "UNKNOWN",
+        };
+
+        print!("Received {}", msg_type_str);
+        if let Some(ref member) = msg.member {
+            print!(" {}", member);
+        }
+        if let Some(ref interface) = msg.interface {
+            print!(" (interface={})", interface);
+        }
+        println!(" serial={}, body_len={}", msg.serial, msg.body.data.len());
+
+        if msg.msg_type == MESSAGE_TYPE_SIGNAL && msg.body.data.len() > 0 {
+            let signal_arg = msg.body.read_str();
+            println!("  Signal argument: {}", signal_arg);
+        }
+    }
 }
