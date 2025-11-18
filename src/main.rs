@@ -8,6 +8,36 @@ const MESSAGE_TYPE_METHOD_CALL: u8 = 1;
 const NO_REPLY_EXPECTED: u8 = 0x1;
 const NO_AUTO_START: u8 = 0x2;
 
+struct MessageBody {
+    data: Vec<u8>,
+    pos: usize,
+}
+
+impl MessageBody {
+    fn new(data: Vec<u8>) -> Self {
+        Self { data, pos: 0 }
+    }
+
+    fn read_u32(&mut self) -> u32 {
+        let value = u32::from_le_bytes([
+            self.data[self.pos],
+            self.data[self.pos + 1],
+            self.data[self.pos + 2],
+            self.data[self.pos + 3],
+        ]);
+        self.pos += 4;
+        value
+    }
+
+    fn read_str(&mut self) -> &str {
+        let len = self.read_u32() as usize;
+        let s = std::str::from_utf8(&self.data[self.pos..self.pos + len])
+            .expect("invalid UTF-8 in string");
+        self.pos += len + 1; // +1 for null terminator
+        s
+    }
+}
+
 struct MessageBuilder {
     data: Vec<u8>,
 }
@@ -119,13 +149,12 @@ impl Connection {
     fn authenticate(&mut self) {
         self.write_all(b"AUTH EXTERNAL\r\n");
 
-        let mut buf = [0; 1_024];
+        let mut buf = [0u8; 256];
         let len = self.read_binary(&mut buf);
         assert_eq!(&buf[..len], b"DATA\r\n");
 
         self.write_all(b"DATA\r\n");
 
-        let mut buf = [0; 1_024];
         let len = self.read_binary(&mut buf);
         let guid = buf[..len]
             .strip_prefix(b"OK ")
@@ -154,7 +183,7 @@ impl Connection {
         self.send_message(msg)
     }
 
-    fn read_message(&mut self) -> Vec<u8> {
+    fn read_message(&mut self) -> MessageBody {
         let mut header = [0u8; 16];
         self.read_exact(&mut header);
 
@@ -174,8 +203,8 @@ impl Connection {
         // Skip padding to 8-byte boundary
         let padding = (8 - ((16 + header_fields_len as usize) % 8)) % 8;
         if padding > 0 {
-            let mut pad = vec![0u8; padding];
-            self.read_exact(&mut pad);
+            let mut pad = [0u8; 7];
+            self.read_exact(&mut pad[..padding]);
         }
 
         let mut body = vec![0u8; body_length as usize];
@@ -183,11 +212,7 @@ impl Connection {
             self.read_exact(&mut body);
         }
 
-        let mut full_message = Vec::new();
-        full_message.extend_from_slice(&header);
-        full_message.extend_from_slice(&header_fields);
-        full_message.extend_from_slice(&body);
-        full_message
+        MessageBody::new(body)
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) {
@@ -206,27 +231,7 @@ fn main() {
     let hello_serial = dbus.send_hello();
     println!("Sent Hello with serial {}", hello_serial);
 
-    let response = dbus.read_message();
-    println!("Received response: {} bytes", response.len());
-
-    // Parse the body to get our unique name
-    // The body contains a string with signature "s"
-    // Format: string_length(u32) + string_bytes + null
-    let body_start = response.len() - {
-        let body_len = u32::from_le_bytes([response[4], response[5], response[6], response[7]]);
-        body_len as usize
-    };
-
-    let unique_name_len = u32::from_le_bytes([
-        response[body_start],
-        response[body_start + 1],
-        response[body_start + 2],
-        response[body_start + 3],
-    ]);
-
-    let unique_name = &response[body_start + 4..body_start + 4 + unique_name_len as usize];
-    println!(
-        "Our unique bus name: {}",
-        std::str::from_utf8(unique_name).unwrap()
-    );
+    let mut body = dbus.read_message();
+    let unique_name = body.read_str();
+    println!("Our unique bus name: {}", unique_name);
 }
