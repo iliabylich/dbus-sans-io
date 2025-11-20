@@ -4,59 +4,26 @@ use std::{
     os::unix::net::UnixStream,
 };
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MessageType {
-    MethodCall = 1,
-    MethodReturn = 2,
-    Error = 3,
-    Signal = 4,
-}
+mod io_operation;
+pub use io_operation::{IoOperation, IoReader, IoWriter};
 
-impl TryFrom<u8> for MessageType {
-    type Error = anyhow::Error;
+mod fixed_size_reader;
+pub(crate) use fixed_size_reader::FixedSizeReader;
 
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            1 => Ok(Self::MethodCall),
-            2 => Ok(Self::MethodReturn),
-            3 => Ok(Self::Error),
-            4 => Ok(Self::Signal),
-            _ => bail!("unknown message type {value}"),
-        }
-    }
-}
+mod fixed_size_writer;
+pub(crate) use fixed_size_writer::FixedSizeWriter;
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-enum HeaderField {
-    Path = 1,
-    Interface = 2,
-    Member = 3,
-    ErrorName = 4,
-    ReplySerial = 5,
-    Destination = 6,
-    Sender = 7,
-    Signature = 8,
-}
+mod header_reader;
+pub(crate) use header_reader::{Header, HeaderReader};
 
-impl TryFrom<u8> for HeaderField {
-    type Error = anyhow::Error;
+mod message_type;
+pub use message_type::MessageType;
 
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            1 => Ok(Self::Path),
-            2 => Ok(Self::Interface),
-            3 => Ok(Self::Member),
-            4 => Ok(Self::ErrorName),
-            5 => Ok(Self::ReplySerial),
-            6 => Ok(Self::Destination),
-            7 => Ok(Self::Sender),
-            8 => Ok(Self::Signature),
-            _ => bail!("unknown header field type {value}"),
-        }
-    }
-}
+mod header_fields;
+pub use header_fields::HeaderField;
+
+mod flags;
+pub use flags::Flags;
 
 struct Message {
     message_type: MessageType,
@@ -65,56 +32,15 @@ struct Message {
     member: Option<String>,
     interface: Option<String>,
     path: Option<String>,
-    body: MessageBody,
+    body: MessageParser,
 }
 
-enum ReadResult<T> {
-    Finished(T),
-    WouldBlock,
-}
-
-struct FixedSizeReader<const N: usize> {
-    buf: [u8; N],
-    pos: usize,
-}
-
-impl<const N: usize> FixedSizeReader<N> {
-    fn new() -> Self {
-        Self {
-            buf: [0; N],
-            pos: 0,
-        }
-    }
-
-    fn continue_reading(&mut self, r: &mut impl Read) -> Result<ReadResult<()>> {
-        loop {
-            match r.read(&mut self.buf[self.pos..]) {
-                Ok(len) => {
-                    self.pos += len;
-                    if self.pos == N {
-                        break;
-                    }
-                }
-                Err(err) => {
-                    if err.kind() == std::io::ErrorKind::WouldBlock {
-                        return Ok(ReadResult::WouldBlock);
-                    } else {
-                        return Err(err.into());
-                    }
-                }
-            }
-        }
-
-        Ok(ReadResult::Finished(()))
-    }
-}
-
-struct MessageBody {
+struct MessageParser {
     data: Vec<u8>,
     pos: usize,
 }
 
-impl MessageBody {
+impl MessageParser {
     fn new(data: Vec<u8>) -> Self {
         Self { data, pos: 0 }
     }
@@ -211,64 +137,6 @@ impl MessageBuilder {
     }
 }
 
-enum HeaderReader {
-    Pending { inner: FixedSizeReader<16> },
-    Done { header: [u8; 16] },
-}
-
-impl HeaderReader {
-    fn new() -> Self {
-        Self::Pending {
-            inner: FixedSizeReader::new(),
-        }
-    }
-
-    fn continue_reading(&mut self, r: &mut impl Read) -> Result<ReadResult<()>> {
-        match self {
-            Self::Pending { inner } => match inner.continue_reading(r)? {
-                ReadResult::Finished(_) => {
-                    *self = Self::Done { header: inner.buf };
-                    Ok(ReadResult::Finished(()))
-                }
-                ReadResult::WouldBlock => Ok(ReadResult::WouldBlock),
-            },
-            Self::Done { .. } => bail!("already done reading"),
-        }
-    }
-
-    fn data(&self) -> Result<&[u8; 16]> {
-        let Self::Done { header } = self else {
-            bail!("haven't read yet")
-        };
-        Ok(header)
-    }
-
-    fn message_type(&self) -> Result<MessageType> {
-        let data = self.data()?;
-        MessageType::try_from(data[1])
-    }
-
-    fn flags(&self) -> Result<u8> {
-        let data = self.data()?;
-        Ok(data[2])
-    }
-
-    fn body_len(&self) -> Result<u32> {
-        let data = self.data()?;
-        Ok(u32::from_le_bytes([data[4], data[5], data[6], data[7]]))
-    }
-
-    fn serial(&self) -> Result<u32> {
-        let data = self.data()?;
-        Ok(u32::from_le_bytes([data[8], data[9], data[10], data[11]]))
-    }
-
-    fn headers_len(&self) -> Result<u32> {
-        let data = self.data()?;
-        Ok(u32::from_le_bytes([data[12], data[13], data[14], data[15]]))
-    }
-}
-
 struct Connection {
     stream: UnixStream,
     serial: u32,
@@ -281,6 +149,7 @@ impl Connection {
         let (_, path) = address.split_once("=").expect("no = separator");
         println!("{path:?}");
         let mut stream = UnixStream::connect(path).expect("failed to create unix socket");
+        // stream.set_nonblocking(true).unwrap();
 
         let written = stream.write(b"\0").expect("failed to write NULL");
         assert_eq!(written, 1);
@@ -341,14 +210,18 @@ impl Connection {
     }
 
     fn read_message(&mut self) -> Result<Message> {
-        let mut header = HeaderReader::new();
-        header.continue_reading(&mut self.stream)?;
+        let mut header_reader = HeaderReader::new();
+        let header = header_reader.continue_reading(&mut self.stream)?;
 
-        let message_type = header.message_type()?;
-        let flags = header.flags()?;
-        let body_len = header.body_len()?;
-        let serial = header.serial()?;
-        let headers_len = header.headers_len()?;
+        let IoOperation::Finished(header) = header else {
+            panic!("failed to read to end");
+        };
+
+        let message_type = header.message_type;
+        let flags = header.flags;
+        let body_len = header.body_len;
+        let serial = header.serial;
+        let headers_len = header.headers_len;
 
         let mut header_fields = vec![0u8; headers_len as usize];
         self.read_binary(&mut header_fields);
@@ -421,7 +294,7 @@ impl Connection {
             member,
             interface,
             path,
-            body: MessageBody::new(body),
+            body: MessageParser::new(body),
         })
     }
 }
