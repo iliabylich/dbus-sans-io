@@ -3,6 +3,7 @@ use anyhow::{Result, bail};
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum HeaderField {
+    Invalid = 0,
     Path = 1,
     Interface = 2,
     Member = 3,
@@ -11,6 +12,7 @@ pub enum HeaderField {
     Destination = 6,
     Sender = 7,
     Signature = 8,
+    UnixFds = 9,
 }
 
 impl TryFrom<u8> for HeaderField {

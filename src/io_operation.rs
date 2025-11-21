@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::io::{Read, Write};
 
 #[must_use]
+#[derive(Debug)]
 pub enum IoOperation<T> {
     Finished(T),
     WouldBlock,
@@ -25,4 +26,8 @@ pub trait IoReader<T> {
 
 pub trait IoWriter<T> {
     fn continue_writing(&mut self, w: &mut impl Write) -> Result<IoOperation<T>>;
+}
+
+pub trait IoRoundtrip<T> {
+    fn continue_roundtrip(&mut self, rw: &mut (impl Read + Write)) -> Result<IoOperation<T>>;
 }

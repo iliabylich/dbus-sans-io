@@ -10,6 +10,12 @@ pub enum MessageType {
     Signal = 4,
 }
 
+impl Default for MessageType {
+    fn default() -> Self {
+        Self::Invalid
+    }
+}
+
 impl TryFrom<u8> for MessageType {
     type Error = anyhow::Error;
 
