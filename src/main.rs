@@ -1,5 +1,8 @@
 use anyhow::{Context as _, Result, bail};
-use std::{io::Write, os::unix::net::UnixStream};
+use std::{
+    io::{ErrorKind, Read as _, Write},
+    os::unix::net::UnixStream,
+};
 
 mod io_operation;
 pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
@@ -12,9 +15,6 @@ pub(crate) use fixed_size_writer::FixedSizeWriter;
 
 mod serial;
 pub(crate) use serial::Serial;
-
-mod auth;
-pub(crate) use auth::{Auth, GUID};
 
 mod message_type;
 pub use message_type::MessageType;
@@ -30,6 +30,11 @@ pub use message::Message;
 
 mod parsers;
 pub use parsers::MessageParser;
+
+use crate::fsm::{AuthFSM, AuthNextAction};
+
+mod fsm;
+mod guid;
 
 struct MessageBuilder {
     data: Vec<u8>,
@@ -101,7 +106,6 @@ impl MessageBuilder {
 struct Connection {
     stream: UnixStream,
     serial: Serial,
-    auth: Option<Auth>,
 }
 
 impl Connection {
@@ -110,16 +114,12 @@ impl Connection {
             std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("no DBUS_SESSION_BUS_ADDRESS");
         let (_, path) = address.split_once("=").expect("no = separator");
         println!("{path:?}");
-        let mut stream = UnixStream::connect(path).expect("failed to create unix socket");
+        let stream = UnixStream::connect(path).expect("failed to create unix socket");
         stream.set_nonblocking(true).unwrap();
-
-        let written = stream.write(b"\0").expect("failed to write NULL");
-        assert_eq!(written, 1);
 
         Self {
             stream,
             serial: Serial::zero(),
-            auth: Some(Auth::new()),
         }
     }
 
@@ -129,14 +129,35 @@ impl Connection {
         }
     }
 
-    fn auth(&mut self) -> Result<GUID> {
-        let mut auth = Auth::new();
+    fn auth(&mut self) -> Result<guid::GUID> {
+        let mut fsm = AuthFSM::new();
+        let mut buf = [0_u8; 50];
+
         loop {
-            match auth.continue_roundtrip(&mut self.stream)? {
-                IoOperation::Finished(guid) => {
-                    return Ok(guid);
+            match fsm.next_action() {
+                AuthNextAction::Read(bytes_needed) => {
+                    match self.stream.read(&mut buf[..bytes_needed]) {
+                        Ok(len) => {
+                            fsm.done_reading(&buf[..len])?;
+                        }
+                        Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                            continue;
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
                 }
-                IoOperation::WouldBlock => {}
+
+                AuthNextAction::Write(bytes) => match self.stream.write(bytes) {
+                    Ok(len) => {
+                        fsm.done_writing(len)?;
+                    }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        continue;
+                    }
+                    Err(err) => return Err(err.into()),
+                },
+
+                AuthNextAction::Done(guid) => return Ok(guid),
             }
         }
     }
