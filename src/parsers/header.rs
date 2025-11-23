@@ -5,8 +5,10 @@ use anyhow::{Result, ensure};
 pub(crate) struct Header<'a>(&'a [u8]);
 
 impl<'a> Header<'a> {
+    pub(crate) const LENGTH: usize = 16;
+
     pub(crate) fn new(bytes: &'a [u8]) -> Result<Self> {
-        ensure!(bytes.len() >= 16);
+        ensure!(bytes.len() >= Self::LENGTH);
         Ok(Self(bytes))
     }
 
@@ -31,7 +33,7 @@ impl<'a> Header<'a> {
     }
 
     pub(crate) fn padding_len(&self) -> usize {
-        let read_so_far = 16 + self.header_fields_len();
+        let read_so_far = Self::LENGTH + self.header_fields_len();
         read_so_far.next_multiple_of(8) - read_so_far
     }
 }

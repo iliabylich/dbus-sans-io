@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail, ensure};
 use std::{
     io::{ErrorKind, Read as _, Write},
     os::unix::net::UnixStream,
@@ -23,9 +23,11 @@ mod message;
 pub use message::Message;
 
 mod parsers;
-pub use parsers::MessageParser;
 
-use crate::fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction};
+use crate::{
+    fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
+    parsers::Value,
+};
 
 mod fsm;
 mod guid;
@@ -194,37 +196,33 @@ impl Connection {
     }
 }
 
+pub trait FromMessage: Sized {
+    fn from_message(message: Message) -> Result<Self>;
+}
+
+pub struct NameAcquired {
+    pub name: String,
+}
+impl FromMessage for NameAcquired {
+    fn from_message(message: Message) -> Result<Self> {
+        ensure!(message.body.len() == 1);
+        let name = message.body.into_iter().next().unwrap();
+        let Value::String(name) = name else {
+            bail!("NameAcquired: expected String, got {name:?}");
+        };
+        Ok(Self { name })
+    }
+}
+
 fn main() {
     let mut dbus = Connection::new_session();
     dbg!(dbus.auth().unwrap());
 
-    let hello_serial = dbus.send_hello();
-    println!("Sent Hello with serial {}", hello_serial);
+    dbus.send_hello();
 
-    let mut msg = dbus.read_message().unwrap();
-    println!("{msg:?}");
-
-    let unique_name = msg.body.read_str().unwrap();
-    println!("Our unique bus name: {}", unique_name);
-
-    println!("\nWaiting for more messages...");
     loop {
-        let mut msg = dbus.read_message().unwrap();
+        let msg = dbus.read_message().unwrap();
 
-        print!("Received {:?}", msg.message_type);
-        if let Some(ref member) = msg.member {
-            print!(" {}", member);
-        }
-        if let Some(ref interface) = msg.interface {
-            print!(" (interface={})", interface);
-        }
-        println!(" serial={}, body_len={}", msg.serial, msg.body.data.len());
-
-        if msg.message_type == MessageType::Signal && msg.body.data.len() > 0 {
-            let signal_arg = msg.body.read_str().unwrap();
-            println!("  Signal argument: {}", signal_arg);
-        }
-
-        return;
+        println!("Received {:?}", msg);
     }
 }
