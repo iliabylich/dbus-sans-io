@@ -5,7 +5,7 @@ mod io_operation;
 pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
 
 mod readers;
-pub(crate) use readers::{BodyReader, DynamicSizeReader, FixedSizeReader, HeaderReader};
+pub(crate) use readers::{DynamicSizeReader, FixedSizeReader, MessageReader};
 
 mod fixed_size_writer;
 pub(crate) use fixed_size_writer::FixedSizeWriter;
@@ -25,52 +25,11 @@ pub use header_field::HeaderField;
 mod flags;
 pub use flags::Flags;
 
-#[derive(Debug)]
-struct Message {
-    message_type: MessageType,
-    flags: u8,
-    serial: u32,
-    member: Option<String>,
-    interface: Option<String>,
-    path: Option<String>,
-    body: MessageParser,
-}
+mod message;
+pub use message::Message;
 
-#[derive(Debug)]
-struct MessageParser {
-    data: Vec<u8>,
-    pos: usize,
-}
-
-impl MessageParser {
-    fn new(data: Vec<u8>) -> Self {
-        Self { data, pos: 0 }
-    }
-
-    fn read_u8(&mut self) -> Result<u8> {
-        let byte = self.data.get(self.pos).copied().context("EOF")?;
-        self.pos += 1;
-        Ok(byte)
-    }
-
-    fn read_u32(&mut self) -> Result<u32> {
-        let value = u32::from_le_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]);
-        Ok(value)
-    }
-
-    fn read_str(&mut self) -> Result<&str> {
-        let len = self.read_u32()? as usize;
-        let s = std::str::from_utf8(&self.data[self.pos..self.pos + len])
-            .expect("invalid UTF-8 in string");
-        self.pos += len + 1; // +1 for null terminator
-        Ok(s)
-    }
-}
+mod parsers;
+pub use parsers::MessageParser;
 
 struct MessageBuilder {
     data: Vec<u8>,
@@ -196,28 +155,13 @@ impl Connection {
     }
 
     fn read_message(&mut self) -> Result<Message> {
-        let mut header_reader = HeaderReader::new();
-        let header = header_reader.continue_reading(&mut self.stream)?;
-
-        let IoOperation::Finished(header) = header else {
-            panic!("failed to read header to end");
+        let mut reader = MessageReader::new();
+        let op = reader.continue_reading(&mut self.stream)?;
+        let IoOperation::Finished(message) = op else {
+            panic!("failed to read message to end");
         };
 
-        let mut body_reader = BodyReader::new(header.body_len);
-        let body_reader = body_reader.continue_reading(&mut self.stream)?;
-        let IoOperation::Finished(body) = body_reader else {
-            panic!("failed to read to body to end");
-        };
-
-        Ok(Message {
-            message_type: header.message_type,
-            flags: header.flags,
-            serial: header.serial,
-            member: header.member,
-            interface: header.interface,
-            path: header.path,
-            body,
-        })
+        Ok(message)
     }
 }
 

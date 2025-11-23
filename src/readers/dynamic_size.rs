@@ -22,6 +22,10 @@ impl DynamicSizeReader {
 
 impl IoReader<Vec<u8>> for DynamicSizeReader {
     fn continue_reading(&mut self, r: &mut impl Read) -> Result<IoOperation<Vec<u8>>> {
+        if self.size == 0 {
+            return Ok(IoOperation::Finished(vec![]));
+        }
+
         if self.drained {
             bail!("reader has already completed and been drained")
         }
