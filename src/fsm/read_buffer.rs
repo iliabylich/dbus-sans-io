@@ -12,6 +12,10 @@ impl ReadBuffer {
         }
     }
 
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        &self.buf[..self.pos]
+    }
+
     pub(crate) fn remainder(&mut self) -> &mut [u8] {
         &mut self.buf[self.pos..]
     }
@@ -37,5 +41,13 @@ impl ReadBuffer {
 
     pub(crate) fn take(&mut self) -> Self {
         std::mem::take(self)
+    }
+
+    pub(crate) fn grow(&mut self, additional: usize) {
+        let len = self.buf.len();
+        self.buf.reserve_exact(additional);
+        while self.buf.len() != len + additional {
+            self.buf.push(0)
+        }
     }
 }

@@ -7,8 +7,8 @@ pub struct MessageParser {
 }
 
 impl MessageParser {
-    pub fn new(data: Vec<u8>) -> Self {
-        Self { data, pos: 0 }
+    pub fn new(data: Vec<u8>, pos: usize) -> Self {
+        Self { data, pos }
     }
 
     pub fn read_u8(&mut self) -> Result<u8> {

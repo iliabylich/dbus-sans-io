@@ -1,40 +1,17 @@
-use crate::{
-    Message,
-    parsers::{Header, HeaderFields, HeaderFieldsParser, HeaderParser},
-};
-use anyhow::{Result, bail, ensure};
+use crate::{Message, fsm::ReadBuffer, parsers::Header};
+use anyhow::{Result, bail};
 
 const HEADER_LEN: usize = 16;
 
 #[derive(Debug)]
 pub enum ReaderFSM {
-    ReadingHeadar {
-        buf: [u8; HEADER_LEN],
-        read: usize,
-    },
-    ReadingHeaderFields {
-        buf: Vec<u8>,
-        read: usize,
-        header: Header,
-    },
-    ReadingPaddingLeftover {
-        rem: usize,
-        header: Header,
-        header_fields: HeaderFields,
-    },
-    ReadingBody {
-        buf: Vec<u8>,
-        read: usize,
-        header: Header,
-        header_fields: HeaderFields,
-    },
-    Done {
-        message: Message,
-    },
+    ReadingHeadar { buf: ReadBuffer },
+    ReadingBody { buf: ReadBuffer },
+    Done { message: Message },
 }
 
-pub enum ReaderNextAction {
-    Read(usize),
+pub enum ReaderNextAction<'a> {
+    Read(&'a mut [u8]),
     Message(Message),
 }
 
@@ -45,75 +22,14 @@ impl ReaderFSM {
 
     fn new_reading_header() -> Self {
         Self::ReadingHeadar {
-            buf: [0; HEADER_LEN],
-            read: 0,
+            buf: ReadBuffer::new(HEADER_LEN),
         }
     }
 
-    fn new_reading_header_fields(header: Header) -> Result<Self, Header> {
-        if header.has_header_fields() {
-            Ok(Self::ReadingHeaderFields {
-                buf: vec![0; header.header_fields_len],
-                read: 0,
-                header,
-            })
-        } else {
-            Err(header)
-        }
-    }
-
-    fn new_reading_padding(
-        header: Header,
-        header_fields: HeaderFields,
-    ) -> Result<Self, (Header, HeaderFields)> {
-        if header.has_padding() {
-            Ok(Self::ReadingPaddingLeftover {
-                rem: header.padding_len(),
-                header,
-                header_fields,
-            })
-        } else {
-            Err((header, header_fields))
-        }
-    }
-
-    fn new_reading_body(
-        header: Header,
-        header_fields: HeaderFields,
-    ) -> Result<Self, (Header, HeaderFields)> {
-        if header.has_body() {
-            Ok(Self::ReadingBody {
-                buf: vec![0; header.body_len],
-                read: 0,
-                header,
-                header_fields,
-            })
-        } else {
-            Err((header, header_fields))
-        }
-    }
-
-    fn new_done(header: Header, header_fields: HeaderFields, body: Vec<u8>) -> Self {
-        Self::Done {
-            message: Message::new(header, header_fields, body),
-        }
-    }
-
-    pub fn next_action(&mut self) -> ReaderNextAction {
+    pub fn next_action(&mut self) -> ReaderNextAction<'_> {
         match self {
-            Self::ReadingHeadar { buf, read } => {
-                let rem = &buf[*read..];
-                ReaderNextAction::Read(rem.len())
-            }
-            Self::ReadingHeaderFields { buf, read, .. } => {
-                let rem = &buf[*read..];
-                ReaderNextAction::Read(rem.len())
-            }
-            Self::ReadingPaddingLeftover { rem, .. } => ReaderNextAction::Read(*rem),
-            Self::ReadingBody { buf, read, .. } => {
-                let rem = &buf[*read..];
-                ReaderNextAction::Read(rem.len())
-            }
+            Self::ReadingHeadar { buf } => ReaderNextAction::Read(buf.remainder()),
+            Self::ReadingBody { buf } => ReaderNextAction::Read(buf.remainder()),
             Self::Done { message } => {
                 let message = std::mem::take(message);
                 *self = Self::new();
@@ -122,87 +38,31 @@ impl ReaderFSM {
         }
     }
 
-    pub fn done_reading(&mut self, data: &[u8]) -> Result<()> {
+    pub fn done_reading(&mut self, len: usize) -> Result<()> {
         match self {
-            Self::ReadingHeadar { buf, read } => {
-                let start_idx = *read;
-                let end_idx = start_idx + data.len();
-                let Some(range) = buf.get_mut(start_idx..end_idx) else {
-                    bail!("can't get range {start_idx}..{end_idx}");
-                };
-                range.copy_from_slice(data);
-                *read += data.len();
-                if *read == HEADER_LEN {
-                    let header = HeaderParser::parse(*buf)?;
-
-                    *self = Result::<Self, ()>::Err(())
-                        .or_else(|_| Self::new_reading_header_fields(header))
-                        .or_else(|h| Self::new_reading_padding(h, HeaderFields::default()))
-                        .or_else(|(h, hf)| Self::new_reading_body(h, hf))
-                        .unwrap_or_else(|(h, hf)| Self::new_done(h, hf, vec![]));
+            Self::ReadingHeadar { buf } => {
+                buf.written(len);
+                if buf.is_full() {
+                    let header = Header::new(buf.as_bytes());
+                    let mut new_size = header.header_fields_len();
+                    new_size = new_size.next_multiple_of(8);
+                    new_size += header.body_len();
+                    buf.grow(new_size);
+                    *self = Self::ReadingBody { buf: buf.take() }
                 }
+
                 Ok(())
             }
-            Self::ReadingHeaderFields { buf, read, header } => {
-                let start_idx = *read;
-                let end_idx = start_idx + data.len();
-                let Some(range) = buf.get_mut(start_idx..end_idx) else {
-                    bail!("can't get range {start_idx}..{end_idx}");
-                };
-                range.copy_from_slice(data);
-                *read += data.len();
-                if *read == buf.len() {
-                    let header = std::mem::take(header);
-                    let buf = std::mem::take(buf);
-                    let header_fields = HeaderFieldsParser::parse(buf)?;
-
-                    *self = Result::<Self, ()>::Err(())
-                        .or_else(|_| Self::new_reading_padding(header, header_fields))
-                        .or_else(|(h, hf)| Self::new_reading_body(h, hf))
-                        .unwrap_or_else(|(h, hf)| Self::new_done(h, hf, vec![]));
+            Self::ReadingBody { buf } => {
+                buf.written(len);
+                if buf.is_full() {
+                    let message = Message::split(buf.take().unwrap());
+                    *self = Self::Done { message }
                 }
+
                 Ok(())
             }
-            Self::ReadingPaddingLeftover {
-                rem,
-                header,
-                header_fields,
-            } => {
-                ensure!(data.len() <= *rem);
-                *rem -= data.len();
-                if *rem == 0 {
-                    let header = std::mem::take(header);
-                    let header_fields = std::mem::take(header_fields);
-
-                    *self = Result::<Self, ()>::Err(())
-                        .or_else(|_| Self::new_reading_body(header, header_fields))
-                        .unwrap_or_else(|(h, hf)| Self::new_done(h, hf, vec![]));
-                }
-                Ok(())
-            }
-            Self::ReadingBody {
-                buf,
-                read,
-                header,
-                header_fields,
-            } => {
-                let start_idx = *read;
-                let end_idx = start_idx + data.len();
-                let Some(range) = buf.get_mut(start_idx..end_idx) else {
-                    bail!("can't get range {start_idx}..{end_idx}");
-                };
-                range.copy_from_slice(data);
-                *read += data.len();
-                if *read == buf.len() {
-                    let header = std::mem::take(header);
-                    let header_fields = std::mem::take(header_fields);
-                    let body = std::mem::take(buf);
-
-                    *self = Self::new_done(header, header_fields, body);
-                }
-                Ok(())
-            }
-            Self::Done { message } => {
+            Self::Done { .. } => {
                 bail!("malformed state, you were supposed to take message, not READ (in {self:?})")
             }
         }

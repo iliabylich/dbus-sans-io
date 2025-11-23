@@ -7,9 +7,6 @@ use std::{
 mod io_operation;
 pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
 
-mod readers;
-pub(crate) use readers::{DynamicSizeReader, FixedSizeReader, MessageReader};
-
 mod fixed_size_writer;
 pub(crate) use fixed_size_writer::FixedSizeWriter;
 
@@ -181,19 +178,16 @@ impl Connection {
 
         loop {
             match fsm.next_action() {
-                ReaderNextAction::Read(bytes_needed) => {
-                    let mut buf = vec![0; bytes_needed];
-                    match self.stream.read(&mut buf) {
-                        Ok(len) => {
-                            fsm.done_reading(&buf[..len])?;
-                        }
-
-                        Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                            continue;
-                        }
-                        Err(err) => return Err(err.into()),
+                ReaderNextAction::Read(buf) => match self.stream.read(buf) {
+                    Ok(len) => {
+                        fsm.done_reading(len)?;
                     }
-                }
+
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        continue;
+                    }
+                    Err(err) => return Err(err.into()),
+                },
 
                 ReaderNextAction::Message(message) => {
                     return Ok(message);

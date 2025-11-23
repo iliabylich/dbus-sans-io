@@ -1,5 +1,3 @@
-use anyhow::{Result, bail};
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageType {
@@ -16,16 +14,14 @@ impl Default for MessageType {
     }
 }
 
-impl TryFrom<u8> for MessageType {
-    type Error = anyhow::Error;
-
-    fn try_from(value: u8) -> Result<Self> {
+impl From<u8> for MessageType {
+    fn from(value: u8) -> Self {
         match value {
-            1 => Ok(Self::MethodCall),
-            2 => Ok(Self::MethodReturn),
-            3 => Ok(Self::Error),
-            4 => Ok(Self::Signal),
-            _ => bail!("unknown message type {value}"),
+            1 => Self::MethodCall,
+            2 => Self::MethodReturn,
+            3 => Self::Error,
+            4 => Self::Signal,
+            _ => Self::Invalid,
         }
     }
 }

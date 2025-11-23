@@ -1,5 +1,4 @@
 use crate::HeaderField;
-use anyhow::Result;
 
 #[derive(Default, Debug)]
 pub(crate) struct HeaderFields {
@@ -8,10 +7,8 @@ pub(crate) struct HeaderFields {
     pub(crate) path: Option<String>,
 }
 
-pub(crate) struct HeaderFieldsParser;
-
-impl HeaderFieldsParser {
-    pub(crate) fn parse(bytes: Vec<u8>) -> Result<HeaderFields> {
+impl HeaderFields {
+    pub(crate) fn new(bytes: &[u8]) -> Self {
         let mut member = None;
         let mut interface = None;
         let mut path = None;
@@ -60,10 +57,10 @@ impl HeaderFieldsParser {
             }
         }
 
-        Ok(HeaderFields {
+        HeaderFields {
             member,
             interface,
             path,
-        })
+        }
     }
 }
