@@ -1,26 +1,5 @@
-use crate::decoders::Signature;
+use crate::types::{Signature, Value};
 use anyhow::{Context, Result, bail};
-
-#[derive(Debug)]
-pub enum Value {
-    Byte(u8),
-    Bool(bool),
-    Int16(i16),
-    UInt16(u16),
-    Int32(i32),
-    UInt32(u32),
-    Int64(i64),
-    UInt64(u64),
-    Double(f64),
-    UnixFD(u32),
-
-    String(String),
-    ObjectPath(Vec<u8>),
-    Signature(String),
-    Struct(Vec<Value>),
-    Array(Vec<Value>),
-    Variant(Box<Value>),
-}
 
 pub trait ReadWriteValue: Sized {
     const ALIGN: usize;
@@ -473,7 +452,9 @@ fn test_write_signature() {
 
 // EVERYTHING
 
-impl Value {
+pub(crate) struct ValueDecoder;
+
+impl ValueDecoder {
     pub fn read_by_signature(
         buf: &[u8],
         pos: usize,
@@ -482,55 +463,55 @@ impl Value {
         match signature {
             Signature::Byte => {
                 let (value, len) = u8::read(buf, pos)?;
-                Ok((Self::Byte(value), len))
+                Ok((Value::Byte(value), len))
             }
             Signature::Bool => {
                 let (value, len) = bool::read(buf, pos)?;
-                Ok((Self::Bool(value), len))
+                Ok((Value::Bool(value), len))
             }
             Signature::Int16 => {
                 let (value, len) = i16::read(buf, pos)?;
-                Ok((Self::Int16(value), len))
+                Ok((Value::Int16(value), len))
             }
             Signature::UInt16 => {
                 let (value, len) = u16::read(buf, pos)?;
-                Ok((Self::UInt16(value), len))
+                Ok((Value::UInt16(value), len))
             }
             Signature::Int32 => {
                 let (value, len) = i32::read(buf, pos)?;
-                Ok((Self::Int32(value), len))
+                Ok((Value::Int32(value), len))
             }
             Signature::UInt32 => {
                 let (value, len) = u32::read(buf, pos)?;
-                Ok((Self::UInt32(value), len))
+                Ok((Value::UInt32(value), len))
             }
             Signature::Int64 => {
                 let (value, len) = i64::read(buf, pos)?;
-                Ok((Self::Int64(value), len))
+                Ok((Value::Int64(value), len))
             }
             Signature::UInt64 => {
                 let (value, len) = u64::read(buf, pos)?;
-                Ok((Self::UInt64(value), len))
+                Ok((Value::UInt64(value), len))
             }
             Signature::Double => {
                 let (value, len) = f64::read(buf, pos)?;
-                Ok((Self::Double(value), len))
+                Ok((Value::Double(value), len))
             }
             Signature::UnixFD => {
                 let (value, len) = u32::read(buf, pos)?;
-                Ok((Self::UnixFD(value), len))
+                Ok((Value::UnixFD(value), len))
             }
             Signature::String => {
                 let (value, len) = read_string(buf, pos)?;
-                Ok((Self::String(value), len))
+                Ok((Value::String(value), len))
             }
             Signature::ObjectPath => {
                 let (value, len) = read_object_path(buf, pos)?;
-                Ok((Self::ObjectPath(value), len))
+                Ok((Value::ObjectPath(value), len))
             }
             Signature::Signature => {
                 let (value, len) = read_signature(buf, pos)?;
-                Ok((Self::Signature(value), len))
+                Ok((Value::Signature(value), len))
             }
             Signature::Struct(signatures) => {
                 let mut fields = vec![];
@@ -540,7 +521,7 @@ impl Value {
                     fields.push(value);
                     total_len += len;
                 }
-                Ok((Self::Struct(fields), total_len))
+                Ok((Value::Struct(fields), total_len))
             }
             Signature::Array(item_signature) => {
                 let (items_count, mut total_len) = u32::read(buf, pos)?;
@@ -551,58 +532,17 @@ impl Value {
                     items.push(item);
                     total_len += item_len;
                 }
-                Ok((Self::Array(items), total_len))
+                Ok((Value::Array(items), total_len))
             }
             Signature::Variant => todo!(),
         }
-    }
-
-    fn signature(&self) -> Result<Signature> {
-        let sig = match self {
-            Self::Byte(_) => Signature::Byte,
-            Self::Bool(_) => Signature::Bool,
-            Self::Int16(_) => Signature::Int16,
-            Self::UInt16(_) => Signature::UInt16,
-            Self::Int32(_) => Signature::Int32,
-            Self::UInt32(_) => Signature::UInt32,
-            Self::Int64(_) => Signature::Int64,
-            Self::UInt64(_) => Signature::UInt64,
-            Self::Double(_) => Signature::Double,
-            Self::UnixFD(_) => Signature::UnixFD,
-            Self::String(_) => Signature::String,
-            Self::ObjectPath(_) => Signature::ObjectPath,
-            Self::Signature(_) => Signature::Signature,
-            Self::Struct(values) => {
-                let mut signatures = vec![];
-                for value in values {
-                    signatures.push(value.signature()?);
-                }
-                Signature::Struct(signatures)
-            }
-            Self::Array(items) => {
-                let mut item_signature = Signature::Byte;
-                if let Some(item) = items.first() {
-                    item_signature = item.signature()?;
-                }
-                for item in items {
-                    if item.signature()? != item_signature {
-                        bail!("heterogenous array")
-                    }
-                }
-                Signature::Array(Box::new(item_signature))
-            }
-            Self::Variant(_value) => {
-                todo!()
-            }
-        };
-        Ok(sig)
     }
 
     pub(crate) fn read_multi(
         buf: &[u8],
         pos: usize,
         signatures: &[Signature],
-    ) -> Result<(Vec<Self>, usize)> {
+    ) -> Result<(Vec<Value>, usize)> {
         let mut out = vec![];
         let mut total_len = 0;
         for signature in signatures {

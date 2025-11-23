@@ -2,9 +2,9 @@ use crate::MessageType;
 use anyhow::{Result, ensure};
 
 #[derive(Default)]
-pub(crate) struct Header<'a>(&'a [u8]);
+pub(crate) struct HeaderDecoder<'a>(&'a [u8]);
 
-impl<'a> Header<'a> {
+impl<'a> HeaderDecoder<'a> {
     pub(crate) const LENGTH: usize = 16;
 
     pub(crate) fn new(bytes: &'a [u8]) -> Result<Self> {
@@ -38,7 +38,7 @@ impl<'a> Header<'a> {
     }
 }
 
-impl std::fmt::Debug for Header<'_> {
+impl std::fmt::Debug for HeaderDecoder<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Header")
             .field("message_type", &self.message_type())

@@ -10,20 +10,13 @@ pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
 mod serial;
 pub(crate) use serial::Serial;
 
-mod message_type;
-pub use message_type::MessageType;
-
-mod flags;
-pub use flags::Flags;
-
-mod message;
-pub use message::Message;
-
 mod decoders;
+mod encoders;
+mod types;
 
 use crate::{
-    decoders::{HeaderField, Value},
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
+    types::{Flags, HeaderField, Message, MessageType, Value},
 };
 
 mod fsm;

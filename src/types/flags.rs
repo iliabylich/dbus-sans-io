@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 
+#[derive(Default)]
 pub struct Flags {
     pub byte: u8,
 }

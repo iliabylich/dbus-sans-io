@@ -1,13 +1,14 @@
 mod header;
-pub(crate) use header::Header;
+pub(crate) use header::HeaderDecoder;
 
 mod header_fields;
-pub(crate) use header_fields::HeaderFields;
+pub(crate) use header_fields::HeaderFieldsDecoder;
+
+mod message;
+pub(crate) use message::MessageDecoder;
 
 mod value;
-pub use value::Value;
+pub(crate) use value::ValueDecoder;
 
 mod signature;
-pub use signature::Signature;
-
-pub use header_fields::HeaderField;
+pub(crate) use signature::SignatureDecoder;

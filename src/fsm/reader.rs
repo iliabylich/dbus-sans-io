@@ -1,4 +1,8 @@
-use crate::{Message, decoders::Header, fsm::ReadBuffer};
+use crate::{
+    Message,
+    decoders::{HeaderDecoder, MessageDecoder},
+    fsm::ReadBuffer,
+};
 use anyhow::{Result, bail};
 
 const HEADER_LEN: usize = 16;
@@ -43,7 +47,7 @@ impl ReaderFSM {
             Self::ReadingHeadar { buf } => {
                 buf.written(len);
                 if buf.is_full() {
-                    let header = Header::new(buf.as_bytes())?;
+                    let header = HeaderDecoder::new(buf.as_bytes())?;
                     let mut new_size = header.header_fields_len();
                     new_size = new_size.next_multiple_of(8);
                     new_size += header.body_len();
@@ -56,7 +60,7 @@ impl ReaderFSM {
             Self::ReadingBody { buf } => {
                 buf.written(len);
                 if buf.is_full() {
-                    let message = Message::split(buf.take().unwrap())?;
+                    let message = MessageDecoder::decode(buf.take().unwrap())?;
                     *self = Self::Done { message }
                 }
 
