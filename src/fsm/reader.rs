@@ -1,9 +1,8 @@
-use anyhow::{Result, bail, ensure};
-
 use crate::{
     Message,
     parsers::{Header, HeaderFields, HeaderFieldsParser, HeaderParser},
 };
+use anyhow::{Result, bail, ensure};
 
 const HEADER_LEN: usize = 16;
 

@@ -131,21 +131,18 @@ impl Connection {
 
     fn auth(&mut self) -> Result<guid::GUID> {
         let mut fsm = AuthFSM::new();
-        let mut buf = [0_u8; 50];
 
         loop {
             match fsm.next_action() {
-                AuthNextAction::Read(bytes_needed) => {
-                    match self.stream.read(&mut buf[..bytes_needed]) {
-                        Ok(len) => {
-                            fsm.done_reading(&buf[..len])?;
-                        }
-                        Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                            continue;
-                        }
-                        Err(err) => return Err(err.into()),
+                AuthNextAction::Read(buf) => match self.stream.read(buf) {
+                    Ok(len) => {
+                        fsm.done_reading(len)?;
                     }
-                }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        continue;
+                    }
+                    Err(err) => return Err(err.into()),
+                },
 
                 AuthNextAction::Write(bytes) => match self.stream.write(bytes) {
                     Ok(len) => {
