@@ -9,3 +9,5 @@ pub use value::Value;
 
 mod signature;
 pub use signature::Signature;
+
+pub use header_fields::HeaderField;

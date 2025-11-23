@@ -13,20 +13,17 @@ pub(crate) use serial::Serial;
 mod message_type;
 pub use message_type::MessageType;
 
-mod header_field;
-pub use header_field::HeaderField;
-
 mod flags;
 pub use flags::Flags;
 
 mod message;
 pub use message::Message;
 
-mod parsers;
+mod decoders;
 
 use crate::{
+    decoders::{HeaderField, Value},
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
-    parsers::Value,
 };
 
 mod fsm;

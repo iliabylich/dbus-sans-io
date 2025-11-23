@@ -1,4 +1,4 @@
-use crate::parsers::Signature;
+use crate::decoders::Signature;
 use anyhow::{Context, Result, bail};
 
 #[derive(Debug)]
