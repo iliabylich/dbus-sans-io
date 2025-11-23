@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result, bail};
+use anyhow::Result;
 use std::{
     io::{ErrorKind, Read as _, Write},
     os::unix::net::UnixStream,
@@ -6,9 +6,6 @@ use std::{
 
 mod io_operation;
 pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
-
-mod fixed_size_writer;
-pub(crate) use fixed_size_writer::FixedSizeWriter;
 
 mod serial;
 pub(crate) use serial::Serial;

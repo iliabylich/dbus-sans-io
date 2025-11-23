@@ -29,11 +29,6 @@ impl ReadBuffer {
         self.buf
     }
 
-    pub(crate) fn reset(&mut self, len: usize) {
-        self.buf = vec![0; len];
-        self.pos = 0
-    }
-
     pub(crate) fn written(&mut self, len: usize) {
         self.pos += len;
         assert!(self.pos <= self.buf.len())

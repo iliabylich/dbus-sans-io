@@ -1,11 +1,13 @@
 use crate::MessageType;
+use anyhow::{Result, ensure};
 
 #[derive(Default)]
 pub(crate) struct Header<'a>(&'a [u8]);
 
 impl<'a> Header<'a> {
-    pub(crate) fn new(bytes: &'a [u8]) -> Self {
-        Self(bytes)
+    pub(crate) fn new(bytes: &'a [u8]) -> Result<Self> {
+        ensure!(bytes.len() >= 16);
+        Ok(Self(bytes))
     }
 
     pub(crate) fn message_type(&self) -> MessageType {
@@ -31,18 +33,6 @@ impl<'a> Header<'a> {
     pub(crate) fn padding_len(&self) -> usize {
         let read_so_far = 16 + self.header_fields_len();
         read_so_far.next_multiple_of(8) - read_so_far
-    }
-
-    pub(crate) fn has_header_fields(&self) -> bool {
-        self.header_fields_len() > 0
-    }
-
-    pub(crate) fn has_padding(&self) -> bool {
-        self.padding_len() > 0
-    }
-
-    pub(crate) fn has_body(&self) -> bool {
-        self.body_len() > 0
     }
 }
 

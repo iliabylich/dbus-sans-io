@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 
 pub struct Flags {
-    byte: u8,
+    pub byte: u8,
 }
 
 impl TryFrom<u8> for Flags {
@@ -17,5 +17,28 @@ impl TryFrom<u8> for Flags {
 
 impl Flags {
     pub const NO_REPLY_EXPECTED: u8 = 0x1;
-    // pub const NO_REPLY_EXPECTED: u8 = 0x1;
+    pub const NO_AUTO_START: u8 = 0x2;
+    pub const ALLOW_INTERACTIVE_AUTHORIZATION: u8 = 0x4;
+}
+
+impl std::fmt::Debug for Flags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut start = false;
+        if self.byte & Self::NO_REPLY_EXPECTED != 0 {
+            write!(f, "NO_REPLY_EXPECTED")?;
+            start = false;
+        }
+        if self.byte & Self::NO_AUTO_START != 0 {
+            write!(f, "{}NO_AUTO_START", if start { "|" } else { "" })?;
+            start = false;
+        }
+        if self.byte & Self::ALLOW_INTERACTIVE_AUTHORIZATION != 0 {
+            write!(
+                f,
+                "{}ALLOW_INTERACTIVE_AUTHORIZATION",
+                if start { "|" } else { "" }
+            )?;
+        }
+        Ok(())
+    }
 }
