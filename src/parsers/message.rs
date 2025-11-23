@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MessageParser {
     pub data: Vec<u8>,
     pub pos: usize,

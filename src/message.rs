@@ -3,7 +3,7 @@ use crate::{
     parsers::{Header, HeaderFields},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Message {
     pub message_type: MessageType,
     pub flags: u8,

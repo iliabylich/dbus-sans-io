@@ -31,7 +31,7 @@ pub use message::Message;
 mod parsers;
 pub use parsers::MessageParser;
 
-use crate::fsm::{AuthFSM, AuthNextAction};
+use crate::fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction};
 
 mod fsm;
 mod guid;
@@ -180,12 +180,27 @@ impl Connection {
     }
 
     fn read_message(&mut self) -> Result<Message> {
-        let mut reader = MessageReader::new();
+        let mut fsm = ReaderFSM::new();
 
         loop {
-            match reader.continue_reading(&mut self.stream)? {
-                IoOperation::Finished(message) => return Ok(message),
-                IoOperation::WouldBlock => {}
+            match fsm.next_action() {
+                ReaderNextAction::Read(bytes_needed) => {
+                    let mut buf = vec![0; bytes_needed];
+                    match self.stream.read(&mut buf) {
+                        Ok(len) => {
+                            fsm.done_reading(&buf[..len])?;
+                        }
+
+                        Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                            continue;
+                        }
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+
+                ReaderNextAction::Message(message) => {
+                    return Ok(message);
+                }
             }
         }
     }

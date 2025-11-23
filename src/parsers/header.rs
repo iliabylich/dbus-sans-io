@@ -10,6 +10,25 @@ pub(crate) struct Header {
     pub(crate) header_fields_len: usize,
 }
 
+impl Header {
+    pub(crate) fn padding_len(&self) -> usize {
+        let read_so_far = 16 + self.header_fields_len;
+        read_so_far.next_multiple_of(8) - read_so_far
+    }
+
+    pub(crate) fn has_header_fields(&self) -> bool {
+        self.header_fields_len > 0
+    }
+
+    pub(crate) fn has_padding(&self) -> bool {
+        self.padding_len() > 0
+    }
+
+    pub(crate) fn has_body(&self) -> bool {
+        self.body_len > 0
+    }
+}
+
 pub(crate) struct HeaderParser;
 
 impl HeaderParser {
