@@ -1,6 +1,6 @@
 use crate::{
     Message,
-    decoders::{HeaderDecoder, MessageDecoder},
+    decoders::{DecodingBuffer, HeaderDecoder, MessageDecoder},
     fsm::ReadBuffer,
 };
 use anyhow::{Result, bail};
@@ -47,11 +47,8 @@ impl ReaderFSM {
             Self::ReadingHeadar { buf } => {
                 buf.written(len);
                 if buf.is_full() {
-                    let header = HeaderDecoder::new(buf.as_bytes())?;
-                    let mut new_size = header.header_fields_len();
-                    new_size = new_size.next_multiple_of(8);
-                    new_size += header.body_len();
-                    buf.grow(new_size);
+                    let header = HeaderDecoder::decode(DecodingBuffer::new(buf.as_bytes()))?;
+                    buf.resize(header.full_message_size());
                     *self = Self::ReadingBody { buf: buf.take() }
                 }
 

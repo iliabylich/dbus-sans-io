@@ -12,3 +12,6 @@ pub(crate) use value::ValueDecoder;
 
 mod signature;
 pub(crate) use signature::SignatureDecoder;
+
+mod buffer;
+pub(crate) use buffer::DecodingBuffer;

@@ -1,6 +1,9 @@
 use crate::{
     Message,
-    decoders::{HeaderDecoder, HeaderFieldsDecoder, ValueDecoder, signature::SignatureDecoder},
+    decoders::{
+        DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
+        signature::SignatureDecoder,
+    },
     types::{Flags, ObjectPath},
 };
 use anyhow::Result;
@@ -9,12 +12,14 @@ pub(crate) struct MessageDecoder;
 
 impl MessageDecoder {
     pub(crate) fn decode(bytes: Vec<u8>) -> Result<Message> {
-        let header = HeaderDecoder::new(&bytes)?;
-        let message_type = header.message_type();
-        let flags = Flags::try_from(header.flags())?;
-        let serial = header.serial();
-        let header_fields_len = header.header_fields_len();
+        let buffer = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH]);
+        let header = HeaderDecoder::decode(buffer)?;
+
         let padding_len = header.padding_len();
+        let message_type = header.message_type;
+        let flags = header.flags;
+        let serial = header.serial;
+        let header_fields_len = header.header_fields_len;
 
         let HeaderFieldsDecoder {
             member,
@@ -38,7 +43,7 @@ impl MessageDecoder {
                 let signatures = SignatureDecoder::parse_multi_to_end(signature.as_bytes())?;
                 let body_offset = HeaderDecoder::LENGTH + header_fields_len + padding_len;
                 let (body, body_len) = ValueDecoder::read_multi(&bytes, body_offset, &signatures)?;
-                assert_eq!(body_len, header.body_len());
+                assert_eq!(body_len, header.body_len);
                 (signatures, body)
             }
             None => (vec![], vec![]),

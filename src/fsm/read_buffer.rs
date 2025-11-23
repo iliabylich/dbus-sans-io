@@ -38,10 +38,10 @@ impl ReadBuffer {
         std::mem::take(self)
     }
 
-    pub(crate) fn grow(&mut self, additional: usize) {
+    pub(crate) fn resize(&mut self, new_size: usize) {
         let len = self.buf.len();
-        self.buf.reserve_exact(additional);
-        while self.buf.len() != len + additional {
+        self.buf.reserve_exact(new_size - len);
+        while self.buf.len() != new_size {
             self.buf.push(0)
         }
     }

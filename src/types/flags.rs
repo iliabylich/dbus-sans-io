@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct Flags {
     pub byte: u8,
 }
