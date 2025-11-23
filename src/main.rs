@@ -111,7 +111,7 @@ impl Connection {
         let (_, path) = address.split_once("=").expect("no = separator");
         println!("{path:?}");
         let mut stream = UnixStream::connect(path).expect("failed to create unix socket");
-        // stream.set_nonblocking(true).unwrap();
+        stream.set_nonblocking(true).unwrap();
 
         let written = stream.write(b"\0").expect("failed to write NULL");
         assert_eq!(written, 1);
@@ -129,12 +129,16 @@ impl Connection {
         }
     }
 
-    fn auth(&mut self) -> Result<IoOperation<GUID>> {
-        let Some(auth) = self.auth.as_mut() else {
-            bail!("already authenticated");
-        };
-
-        auth.continue_roundtrip(&mut self.stream)
+    fn auth(&mut self) -> Result<GUID> {
+        let mut auth = Auth::new();
+        loop {
+            match auth.continue_roundtrip(&mut self.stream)? {
+                IoOperation::Finished(guid) => {
+                    return Ok(guid);
+                }
+                IoOperation::WouldBlock => {}
+            }
+        }
     }
 
     fn send_message(&mut self, builder: MessageBuilder) -> u32 {
@@ -156,18 +160,19 @@ impl Connection {
 
     fn read_message(&mut self) -> Result<Message> {
         let mut reader = MessageReader::new();
-        let op = reader.continue_reading(&mut self.stream)?;
-        let IoOperation::Finished(message) = op else {
-            panic!("failed to read message to end");
-        };
 
-        Ok(message)
+        loop {
+            match reader.continue_reading(&mut self.stream)? {
+                IoOperation::Finished(message) => return Ok(message),
+                IoOperation::WouldBlock => {}
+            }
+        }
     }
 }
 
 fn main() {
     let mut dbus = Connection::new_session();
-    dbg!(dbus.auth());
+    dbg!(dbus.auth().unwrap());
 
     let hello_serial = dbus.send_hello();
     println!("Sent Hello with serial {}", hello_serial);
