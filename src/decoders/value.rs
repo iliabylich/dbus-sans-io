@@ -1,10 +1,13 @@
-use crate::types::{Signature, Value};
-use anyhow::{Context, Result, bail};
+use crate::{
+    decoders::DecodingBuffer,
+    types::{Signature, Value},
+};
+use anyhow::Result;
 
 pub trait ReadWriteValue: Sized {
     const ALIGN: usize;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)>;
+    fn read(buf: &mut DecodingBuffer) -> Result<Self>;
     fn write(self, buf: &mut Vec<u8>);
 }
 macro_rules! at {
@@ -31,8 +34,8 @@ macro_rules! align_write {
 impl ReadWriteValue for u8 {
     const ALIGN: usize = 1;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        Ok((at!(buf, pos), 1))
+    fn read(buffer: &mut DecodingBuffer) -> Result<Self> {
+        buffer.next_u8()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -41,7 +44,9 @@ impl ReadWriteValue for u8 {
 }
 #[test]
 fn test_read_byte() {
-    assert_eq!(u8::read(b"\xFF", 0).unwrap(), (255, 1));
+    let mut buf = DecodingBuffer::new(b"\xFF").with_pos(0);
+    assert_eq!(u8::read(&mut buf).unwrap(), 255);
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_byte() {
@@ -53,8 +58,8 @@ fn test_write_byte() {
 impl ReadWriteValue for bool {
     const ALIGN: usize = u32::ALIGN;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        u32::read(buf, pos).map(|(v, len)| (dbg!(v) != 0, len))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        u32::read(buf).map(|v| v != 0)
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -64,14 +69,13 @@ impl ReadWriteValue for bool {
 }
 #[test]
 fn test_read_bool() {
-    assert_eq!(
-        bool::read(b"\0\0\0\0\x01\x00\x00\x00", 1).unwrap(),
-        (true, 7)
-    );
-    assert_eq!(
-        bool::read(b"\0\0\0\0\x00\x00\x00\x00", 1).unwrap(),
-        (false, 7)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x01\x00\x00\x00").with_pos(1);
+    assert_eq!(bool::read(&mut buf).unwrap(), true);
+    assert!(buf.is_eof());
+
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x00\x00\x00\x00").with_pos(1);
+    assert_eq!(bool::read(&mut buf).unwrap(), false);
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_bool() {
@@ -89,11 +93,9 @@ fn test_write_bool() {
 impl ReadWriteValue for i16 {
     const ALIGN: usize = 2;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = i16::from_le_bytes([at!(buf, idx), at!(buf, idx + 1)]);
-        idx += 2;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(2)?;
+        buf.next_i16()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -103,10 +105,9 @@ impl ReadWriteValue for i16 {
 }
 #[test]
 fn test_read_int16() {
-    assert_eq!(
-        i16::read(b"\0\0\xAA\xBB", 1).unwrap(),
-        (0xBB << 8 | 0xAA, 3)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB").with_pos(1);
+    assert_eq!(i16::read(&mut buf).unwrap(), 0xBB << 8 | 0xAA);
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_int16() {
@@ -118,11 +119,9 @@ fn test_write_int16() {
 impl ReadWriteValue for u16 {
     const ALIGN: usize = 2;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = u16::from_le_bytes([at!(buf, idx), at!(buf, idx + 1)]);
-        idx += 2;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(2)?;
+        buf.next_u16()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -132,10 +131,9 @@ impl ReadWriteValue for u16 {
 }
 #[test]
 fn test_read_uint16() {
-    assert_eq!(
-        u16::read(b"\0\0\xAA\xBB", 1).unwrap(),
-        (0xBB << 8 | 0xAA, 3)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB").with_pos(1);
+    assert_eq!(u16::read(&mut buf).unwrap(), 0xBB << 8 | 0xAA);
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_uint16() {
@@ -149,16 +147,9 @@ fn test_write_uint16() {
 impl ReadWriteValue for i32 {
     const ALIGN: usize = 4;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = i32::from_le_bytes([
-            at!(buf, idx),
-            at!(buf, idx + 1),
-            at!(buf, idx + 2),
-            at!(buf, idx + 3),
-        ]);
-        idx += 4;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(4)?;
+        buf.next_i32()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -168,10 +159,12 @@ impl ReadWriteValue for i32 {
 }
 #[test]
 fn test_read_int32() {
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD").with_pos(1);
     assert_eq!(
-        i32::read(b"\0\0\0\0\xAA\xBB\xCC\xDD", 1).unwrap(),
-        (0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA, 7)
-    )
+        i32::read(&mut buf).unwrap(),
+        0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
+    );
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_int32() {
@@ -183,16 +176,9 @@ fn test_write_int32() {
 impl ReadWriteValue for u32 {
     const ALIGN: usize = 4;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = u32::from_le_bytes([
-            at!(buf, idx),
-            at!(buf, idx + 1),
-            at!(buf, idx + 2),
-            at!(buf, idx + 3),
-        ]);
-        idx += 4;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(4)?;
+        buf.next_u32()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -202,10 +188,12 @@ impl ReadWriteValue for u32 {
 }
 #[test]
 fn test_read_uint32() {
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD").with_pos(1);
     assert_eq!(
-        u32::read(b"\0\0\0\0\xAA\xBB\xCC\xDD", 1).unwrap(),
-        (0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA, 7)
-    )
+        u32::read(&mut buf).unwrap(),
+        0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
+    );
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_uint32() {
@@ -219,20 +207,9 @@ fn test_write_uint32() {
 impl ReadWriteValue for i64 {
     const ALIGN: usize = 8;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = i64::from_le_bytes([
-            at!(buf, idx),
-            at!(buf, idx + 1),
-            at!(buf, idx + 2),
-            at!(buf, idx + 3),
-            at!(buf, idx + 4),
-            at!(buf, idx + 5),
-            at!(buf, idx + 6),
-            at!(buf, idx + 7),
-        ]);
-        idx += 8;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(8)?;
+        buf.next_i64()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -242,20 +219,20 @@ impl ReadWriteValue for i64 {
 }
 #[test]
 fn test_read_int64() {
+    let mut buf =
+        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08").with_pos(1);
     assert_eq!(
-        i64::read(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08", 1).unwrap(),
-        (
-            0x08 << 56
-                | 0x07 << 48
-                | 0x06 << 40
-                | 0x05 << 32
-                | 0x04 << 24
-                | 0x03 << 16
-                | 0x02 << 8
-                | 0x01,
-            15
-        )
-    )
+        i64::read(&mut buf).unwrap(),
+        0x08 << 56
+            | 0x07 << 48
+            | 0x06 << 40
+            | 0x05 << 32
+            | 0x04 << 24
+            | 0x03 << 16
+            | 0x02 << 8
+            | 0x01,
+    );
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_int64() {
@@ -275,20 +252,9 @@ fn test_write_int64() {
 impl ReadWriteValue for u64 {
     const ALIGN: usize = 8;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = u64::from_le_bytes([
-            at!(buf, idx),
-            at!(buf, idx + 1),
-            at!(buf, idx + 2),
-            at!(buf, idx + 3),
-            at!(buf, idx + 4),
-            at!(buf, idx + 5),
-            at!(buf, idx + 6),
-            at!(buf, idx + 7),
-        ]);
-        idx += 8;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(8)?;
+        buf.next_u64()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -298,20 +264,20 @@ impl ReadWriteValue for u64 {
 }
 #[test]
 fn test_read_uint64() {
+    let mut buf =
+        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08").with_pos(1);
     assert_eq!(
-        u64::read(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08", 1).unwrap(),
-        (
-            0x08 << 56
-                | 0x07 << 48
-                | 0x06 << 40
-                | 0x05 << 32
-                | 0x04 << 24
-                | 0x03 << 16
-                | 0x02 << 8
-                | 0x01,
-            15
-        )
-    )
+        u64::read(&mut buf).unwrap(),
+        0x08 << 56
+            | 0x07 << 48
+            | 0x06 << 40
+            | 0x05 << 32
+            | 0x04 << 24
+            | 0x03 << 16
+            | 0x02 << 8
+            | 0x01,
+    );
+    assert!(buf.is_eof());
 }
 #[test]
 fn test_write_uint64() {
@@ -333,20 +299,9 @@ fn test_write_uint64() {
 impl ReadWriteValue for f64 {
     const ALIGN: usize = 8;
 
-    fn read(buf: &[u8], pos: usize) -> Result<(Self, usize)> {
-        let mut idx = align_read!(pos);
-        let value = f64::from_le_bytes([
-            at!(buf, idx),
-            at!(buf, idx + 1),
-            at!(buf, idx + 2),
-            at!(buf, idx + 3),
-            at!(buf, idx + 4),
-            at!(buf, idx + 5),
-            at!(buf, idx + 6),
-            at!(buf, idx + 7),
-        ]);
-        idx += 8;
-        Ok((value, idx - pos))
+    fn read(buf: &mut DecodingBuffer) -> Result<Self> {
+        buf.align(8)?;
+        buf.next_f64()
     }
 
     fn write(self, buf: &mut Vec<u8>) {
@@ -356,10 +311,10 @@ impl ReadWriteValue for f64 {
 }
 #[test]
 fn test_read_f64() {
-    assert_eq!(
-        f64::read(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F", 1).unwrap(),
-        (0.123, 15)
-    )
+    let mut buf =
+        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F").with_pos(1);
+    assert_eq!(f64::read(&mut buf).unwrap(), 0.123);
+    assert!(buf.is_eof())
 }
 
 #[test]
@@ -371,11 +326,11 @@ fn test_write_f64() {
 
 // string
 
-fn read_string(buf: &[u8], mut pos: usize) -> Result<(String, usize)> {
-    let (content_len, u32_len) = u32::read(buf, pos)?;
-    pos += u32_len;
-    let s = String::from_utf8_lossy(&buf[pos..pos + content_len as usize]).into_owned();
-    Ok((s, u32_len + content_len as usize + 1))
+fn read_string(buf: &mut DecodingBuffer) -> Result<String> {
+    let len = u32::read(buf)? as usize;
+    let s = String::from_utf8_lossy(buf.next_n(len)?).into_owned();
+    buf.skip();
+    Ok(s)
 }
 fn write_str(s: &str, buf: &mut Vec<u8>) {
     (s.len() as u32).write(buf);
@@ -384,10 +339,9 @@ fn write_str(s: &str, buf: &mut Vec<u8>) {
 }
 #[test]
 fn test_read_string() {
-    assert_eq!(
-        read_string(b"\0\0\0\0\x04\0\0\0abcd\0", 1).unwrap(),
-        ("abcd".to_string(), 12)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0").with_pos(1);
+    assert_eq!(read_string(&mut buf).unwrap(), "abcd");
+    assert!(buf.is_eof())
 }
 #[test]
 fn test_write_string() {
@@ -398,11 +352,11 @@ fn test_write_string() {
 
 // object path
 
-fn read_object_path(buf: &[u8], mut pos: usize) -> Result<(Vec<u8>, usize)> {
-    let (content_len, u32_len) = u32::read(buf, pos)?;
-    pos += u32_len;
-    let s = buf[pos..pos + content_len as usize].to_vec();
-    Ok((s, u32_len + content_len as usize + 1))
+fn read_object_path(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
+    let len = u32::read(buf)? as usize;
+    let bytes = buf.next_n(len)?.to_vec();
+    buf.skip();
+    Ok(bytes)
 }
 fn write_object_path(path: &[u8], buf: &mut Vec<u8>) {
     (path.len() as u32).write(buf);
@@ -411,10 +365,9 @@ fn write_object_path(path: &[u8], buf: &mut Vec<u8>) {
 }
 #[test]
 fn test_read_object_path() {
-    assert_eq!(
-        read_object_path(b"\0\0\0\0\x04\0\0\0abcd\0", 1).unwrap(),
-        (b"abcd".to_vec(), 12)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0").with_pos(1);
+    assert_eq!(read_object_path(&mut buf).unwrap(), b"abcd");
+    assert!(buf.is_eof())
 }
 #[test]
 fn test_write_object_path() {
@@ -425,11 +378,11 @@ fn test_write_object_path() {
 
 // signature
 
-fn read_signature(buf: &[u8], mut pos: usize) -> Result<(String, usize)> {
-    let (content_len, u8_len) = u8::read(buf, pos)?;
-    pos += u8_len;
-    let s = String::from_utf8_lossy(&buf[pos..pos + content_len as usize]).into_owned();
-    Ok((s, u8_len + content_len as usize + 1))
+fn read_signature(buf: &mut DecodingBuffer) -> Result<String> {
+    let len = u8::read(buf)? as usize;
+    let s = String::from_utf8_lossy(buf.next_n(len)?).into_owned();
+    buf.skip();
+    Ok(s)
 }
 fn write_signature(sig: &str, buf: &mut Vec<u8>) {
     (sig.len() as u8).write(buf);
@@ -438,10 +391,9 @@ fn write_signature(sig: &str, buf: &mut Vec<u8>) {
 }
 #[test]
 fn test_read_signature() {
-    assert_eq!(
-        read_signature(b"\0\x04abcd\0", 1).unwrap(),
-        ("abcd".to_string(), 6)
-    )
+    let mut buf = DecodingBuffer::new(b"\0\x04abcd\0").with_pos(1);
+    assert_eq!(read_signature(&mut buf).unwrap(), "abcd");
+    assert!(buf.is_eof())
 }
 #[test]
 fn test_write_signature() {
@@ -455,101 +407,90 @@ fn test_write_signature() {
 pub(crate) struct ValueDecoder;
 
 impl ValueDecoder {
-    pub fn read_by_signature(
-        buf: &[u8],
-        pos: usize,
-        signature: &Signature,
-    ) -> Result<(Value, usize)> {
+    pub fn read_by_signature(buf: &mut DecodingBuffer, signature: &Signature) -> Result<Value> {
         match signature {
             Signature::Byte => {
-                let (value, len) = u8::read(buf, pos)?;
-                Ok((Value::Byte(value), len))
+                let value = u8::read(buf)?;
+                Ok(Value::Byte(value))
             }
             Signature::Bool => {
-                let (value, len) = bool::read(buf, pos)?;
-                Ok((Value::Bool(value), len))
+                let value = bool::read(buf)?;
+                Ok(Value::Bool(value))
             }
             Signature::Int16 => {
-                let (value, len) = i16::read(buf, pos)?;
-                Ok((Value::Int16(value), len))
+                let value = i16::read(buf)?;
+                Ok(Value::Int16(value))
             }
             Signature::UInt16 => {
-                let (value, len) = u16::read(buf, pos)?;
-                Ok((Value::UInt16(value), len))
+                let value = u16::read(buf)?;
+                Ok(Value::UInt16(value))
             }
             Signature::Int32 => {
-                let (value, len) = i32::read(buf, pos)?;
-                Ok((Value::Int32(value), len))
+                let value = i32::read(buf)?;
+                Ok(Value::Int32(value))
             }
             Signature::UInt32 => {
-                let (value, len) = u32::read(buf, pos)?;
-                Ok((Value::UInt32(value), len))
+                let value = u32::read(buf)?;
+                Ok(Value::UInt32(value))
             }
             Signature::Int64 => {
-                let (value, len) = i64::read(buf, pos)?;
-                Ok((Value::Int64(value), len))
+                let value = i64::read(buf)?;
+                Ok(Value::Int64(value))
             }
             Signature::UInt64 => {
-                let (value, len) = u64::read(buf, pos)?;
-                Ok((Value::UInt64(value), len))
+                let value = u64::read(buf)?;
+                Ok(Value::UInt64(value))
             }
             Signature::Double => {
-                let (value, len) = f64::read(buf, pos)?;
-                Ok((Value::Double(value), len))
+                let value = f64::read(buf)?;
+                Ok(Value::Double(value))
             }
             Signature::UnixFD => {
-                let (value, len) = u32::read(buf, pos)?;
-                Ok((Value::UnixFD(value), len))
+                let value = u32::read(buf)?;
+                Ok(Value::UnixFD(value))
             }
             Signature::String => {
-                let (value, len) = read_string(buf, pos)?;
-                Ok((Value::String(value), len))
+                let value = read_string(buf)?;
+                Ok(Value::String(value))
             }
             Signature::ObjectPath => {
-                let (value, len) = read_object_path(buf, pos)?;
-                Ok((Value::ObjectPath(value), len))
+                let value = read_object_path(buf)?;
+                Ok(Value::ObjectPath(value))
             }
             Signature::Signature => {
-                let (value, len) = read_signature(buf, pos)?;
-                Ok((Value::Signature(value), len))
+                let value = read_signature(buf)?;
+                Ok(Value::Signature(value))
             }
             Signature::Struct(signatures) => {
                 let mut fields = vec![];
-                let mut total_len = 0;
                 for signature in signatures {
-                    let (value, len) = Self::read_by_signature(buf, pos + total_len, signature)?;
+                    let value = Self::read_by_signature(buf, signature)?;
                     fields.push(value);
-                    total_len += len;
                 }
-                Ok((Value::Struct(fields), total_len))
+                Ok(Value::Struct(fields))
             }
             Signature::Array(item_signature) => {
-                let (items_count, mut total_len) = u32::read(buf, pos)?;
+                let items_count = u32::read(buf)?;
                 let mut items = Vec::with_capacity(items_count as usize);
                 for _ in 0..items_count {
-                    let (item, item_len) =
-                        Self::read_by_signature(buf, pos + total_len, item_signature)?;
+                    let item = Self::read_by_signature(buf, item_signature)?;
                     items.push(item);
-                    total_len += item_len;
                 }
-                Ok((Value::Array(items), total_len))
+                Ok(Value::Array(items))
             }
             Signature::Variant => todo!(),
         }
     }
 
     pub(crate) fn read_multi(
-        buf: &[u8],
-        pos: usize,
+        buf: &mut DecodingBuffer,
         signatures: &[Signature],
-    ) -> Result<(Vec<Value>, usize)> {
+    ) -> Result<Vec<Value>> {
         let mut out = vec![];
-        let mut total_len = 0;
         for signature in signatures {
-            let (value, len) = Self::read_by_signature(buf, pos + total_len, &signature)?;
+            let value = Self::read_by_signature(buf, &signature)?;
             out.push(value);
-            total_len += len;
         }
-        Ok((out, total_len))
+        Ok(out)
     }
 }

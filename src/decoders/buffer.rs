@@ -19,6 +19,10 @@ impl<'a> DecodingBuffer<'a> {
         self
     }
 
+    pub(crate) fn pos(&self) -> usize {
+        self.pos
+    }
+
     pub(crate) fn len(&self) -> usize {
         self.data.len() - self.pos
     }
@@ -29,8 +33,70 @@ impl<'a> DecodingBuffer<'a> {
         Ok(*byte)
     }
 
+    pub(crate) fn next_u16(&mut self) -> Result<u16> {
+        Ok(u16::from_le_bytes([self.next_u8()?, self.next_u8()?]))
+    }
+
     pub(crate) fn next_u32(&mut self) -> Result<u32> {
         Ok(u32::from_le_bytes([
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+        ]))
+    }
+
+    pub(crate) fn next_u64(&mut self) -> Result<u64> {
+        Ok(u64::from_le_bytes([
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+        ]))
+    }
+
+    pub(crate) fn next_i8(&mut self) -> Result<i8> {
+        let byte = self.data.get(self.pos).context("EOF")?;
+        self.pos += 1;
+        Ok(*byte as i8)
+    }
+
+    pub(crate) fn next_i16(&mut self) -> Result<i16> {
+        Ok(i16::from_le_bytes([self.next_u8()?, self.next_u8()?]))
+    }
+
+    pub(crate) fn next_i32(&mut self) -> Result<i32> {
+        Ok(i32::from_le_bytes([
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+        ]))
+    }
+
+    pub(crate) fn next_i64(&mut self) -> Result<i64> {
+        Ok(i64::from_le_bytes([
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+        ]))
+    }
+
+    pub(crate) fn next_f64(&mut self) -> Result<f64> {
+        Ok(f64::from_le_bytes([
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
+            self.next_u8()?,
             self.next_u8()?,
             self.next_u8()?,
             self.next_u8()?,
@@ -48,13 +114,11 @@ impl<'a> DecodingBuffer<'a> {
         self.pos >= self.data.len()
     }
 
-    pub(crate) fn skip_n(&mut self, count: usize) -> Result<()> {
+    pub(crate) fn skip_n(&mut self, count: usize) {
         self.pos += count;
-        ensure!(!self.is_eof());
-        Ok(())
     }
 
-    pub(crate) fn skip(&mut self) -> Result<()> {
+    pub(crate) fn skip(&mut self) {
         self.skip_n(1)
     }
 
@@ -62,5 +126,14 @@ impl<'a> DecodingBuffer<'a> {
         self.set_pos(self.pos.next_multiple_of(align));
         ensure!(!self.is_eof());
         Ok(())
+    }
+}
+
+impl std::fmt::Debug for DecodingBuffer<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DecodingBuffer")
+            .field("rem", &&self.data[self.pos..])
+            .field("pos", &self.pos)
+            .finish()
     }
 }

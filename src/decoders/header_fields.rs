@@ -1,5 +1,5 @@
 use crate::{
-    decoders::{SignatureDecoder, ValueDecoder},
+    decoders::{DecodingBuffer, SignatureDecoder, ValueDecoder},
     types::{HeaderField, Value},
 };
 use anyhow::{Result, bail, ensure};
@@ -18,7 +18,7 @@ pub(crate) struct HeaderFieldsDecoder {
 }
 
 impl HeaderFieldsDecoder {
-    pub(crate) fn new(bytes: &[u8], mut pos: usize) -> Result<Self> {
+    pub(crate) fn new(mut buf: DecodingBuffer) -> Result<Self> {
         let mut member = None;
         let mut interface = None;
         let mut path = None;
@@ -29,31 +29,23 @@ impl HeaderFieldsDecoder {
         let mut body_signature = None;
         let mut unix_fds = None;
 
-        while pos < bytes.len() {
-            pos = pos.next_multiple_of(8);
+        while !buf.is_eof() {
+            buf.align(8)?;
 
-            let Some(header_field) = bytes.get(pos).copied() else {
+            let Ok(header_field) = buf.next_u8() else {
                 break;
             };
-            pos += 1;
             let header_field = HeaderField::from(header_field);
 
-            let Some(sig_len) = bytes.get(pos).copied() else {
-                bail!("failed to read signature length");
-            };
-            let sig_len = sig_len as usize;
+            // TODO: this is literally read_signature
+            let sig_len = buf.next_u8()? as usize;
             ensure!(sig_len == 1);
-            pos += 1;
 
-            let Some(signature) = bytes.get(pos..pos + sig_len) else {
-                bail!("failed to read single-byte header signature");
-            };
+            let signature = buf.next_n(sig_len)?;
             let signature = SignatureDecoder::parse_one_to_end(signature).unwrap();
-            pos += sig_len;
-            pos += 1; // skip signature null terminator
+            buf.skip(); // NULL
 
-            let (value, len) = ValueDecoder::read_by_signature(&bytes, pos, &signature)?;
-            pos += len;
+            let value = ValueDecoder::read_by_signature(&mut buf, &signature)?;
 
             match (header_field, value) {
                 (HeaderField::Invalid, value) => {

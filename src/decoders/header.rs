@@ -22,6 +22,11 @@ impl Header {
         out += self.body_len;
         out
     }
+
+    pub(crate) fn body_offset(&self) -> usize {
+        (HeaderDecoder::LENGTH + self.header_fields_len).next_multiple_of(8)
+        // HeaderDecoder::LENGTH + self.header_fields_len + self.padding_len()
+    }
 }
 
 impl std::fmt::Debug for Header {
@@ -45,10 +50,10 @@ impl HeaderDecoder {
     pub(crate) fn decode(mut buffer: DecodingBuffer<'_>) -> Result<Header> {
         ensure!(buffer.len() >= Self::LENGTH);
 
-        let _ = buffer.skip()?;
+        buffer.skip();
         let message_type = MessageType::from(buffer.next_u8()?);
         let flags = Flags::try_from(buffer.next_u8()?)?;
-        let _ = buffer.skip()?;
+        buffer.skip();
         let body_len = buffer.next_u32()? as usize;
         let serial = buffer.next_u32()?;
         let header_fields_len = buffer.next_u32()? as usize;

@@ -4,7 +4,7 @@ use crate::{
         DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
         signature::SignatureDecoder,
     },
-    types::{Flags, ObjectPath},
+    types::ObjectPath,
 };
 use anyhow::Result;
 
@@ -15,11 +15,13 @@ impl MessageDecoder {
         let buffer = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH]);
         let header = HeaderDecoder::decode(buffer)?;
 
-        let padding_len = header.padding_len();
         let message_type = header.message_type;
         let flags = header.flags;
         let serial = header.serial;
         let header_fields_len = header.header_fields_len;
+
+        let buffer = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH + header_fields_len])
+            .with_pos(HeaderDecoder::LENGTH);
 
         let HeaderFieldsDecoder {
             member,
@@ -31,19 +33,16 @@ impl MessageDecoder {
             sender,
             body_signature,
             unix_fds,
-        } = HeaderFieldsDecoder::new(
-            &bytes[..HeaderDecoder::LENGTH + header_fields_len],
-            HeaderDecoder::LENGTH,
-        )?;
+        } = HeaderFieldsDecoder::new(buffer)?;
 
         let path = path.map(ObjectPath::new);
 
         let (body_signature, body) = match body_signature {
             Some(signature) => {
                 let signatures = SignatureDecoder::parse_multi_to_end(signature.as_bytes())?;
-                let body_offset = HeaderDecoder::LENGTH + header_fields_len + padding_len;
-                let (body, body_len) = ValueDecoder::read_multi(&bytes, body_offset, &signatures)?;
-                assert_eq!(body_len, header.body_len);
+                let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
+                let body = ValueDecoder::read_multi(&mut buf, &signatures)?;
+                assert!(buf.is_eof());
                 (signatures, body)
             }
             None => (vec![], vec![]),
