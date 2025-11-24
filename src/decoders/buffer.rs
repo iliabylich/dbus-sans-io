@@ -27,6 +27,10 @@ impl<'a> DecodingBuffer<'a> {
         self.buf.len() - self.pos
     }
 
+    pub(crate) fn peek(&self) -> Option<u8> {
+        self.buf.get(self.pos).copied()
+    }
+
     pub(crate) fn next_u8(&mut self) -> Result<u8> {
         let byte = self.buf.get(self.pos).context("EOF")?;
         self.pos += 1;

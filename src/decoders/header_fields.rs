@@ -1,5 +1,5 @@
 use crate::{
-    decoders::{DecodingBuffer, SignatureDecoder, ValueDecoder},
+    decoders::{DecodingBuffer, SignatureDecoder, ValueDecoder, value::read_signature},
     types::{HeaderField, Value},
 };
 use anyhow::{Result, bail, ensure};
@@ -37,13 +37,10 @@ impl HeaderFieldsDecoder {
             };
             let header_field = HeaderField::from(header_field);
 
-            // TODO: this is literally read_signature
-            let sig_len = buf.next_u8()? as usize;
-            ensure!(sig_len == 1);
-
-            let signature = buf.next_n(sig_len)?;
-            let signature = SignatureDecoder::parse_one_to_end(signature).unwrap();
-            buf.skip(); // NULL
+            let signature = read_signature(&mut buf)?;
+            let mut signature_buf = DecodingBuffer::new(signature.as_bytes());
+            let signature = SignatureDecoder::parse_one(&mut signature_buf)?;
+            ensure!(signature_buf.is_eof());
 
             let value = ValueDecoder::read_by_signature(&mut buf, &signature)?;
 

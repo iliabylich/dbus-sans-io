@@ -6,7 +6,7 @@ use crate::{
     },
     types::ObjectPath,
 };
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 pub(crate) struct MessageDecoder;
 
@@ -39,7 +39,9 @@ impl MessageDecoder {
 
         let (body_signature, body) = match body_signature {
             Some(signature) => {
-                let signatures = SignatureDecoder::parse_multi_to_end(signature.as_bytes())?;
+                let mut signature_buf = DecodingBuffer::new(signature.as_bytes());
+                let signatures = SignatureDecoder::parse_multi(&mut signature_buf)?;
+                ensure!(signature_buf.is_eof());
                 let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
                 let body = ValueDecoder::read_multi(&mut buf, &signatures)?;
                 assert!(buf.is_eof());

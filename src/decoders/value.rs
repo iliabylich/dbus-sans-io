@@ -378,7 +378,7 @@ fn test_write_object_path() {
 
 // signature
 
-fn read_signature(buf: &mut DecodingBuffer) -> Result<String> {
+pub(crate) fn read_signature(buf: &mut DecodingBuffer) -> Result<String> {
     let len = u8::read(buf)? as usize;
     let s = String::from_utf8_lossy(buf.next_n(len)?).into_owned();
     buf.skip();

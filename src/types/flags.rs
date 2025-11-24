@@ -16,6 +16,12 @@ impl TryFrom<u8> for Flags {
     }
 }
 
+impl From<Flags> for u8 {
+    fn from(flags: Flags) -> Self {
+        flags.byte
+    }
+}
+
 impl Flags {
     pub const NO_REPLY_EXPECTED: u8 = 0x1;
     pub const NO_AUTO_START: u8 = 0x2;
