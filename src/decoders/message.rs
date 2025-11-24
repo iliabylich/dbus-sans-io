@@ -4,7 +4,7 @@ use crate::{
         DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
         signature::SignatureDecoder,
     },
-    types::ObjectPath,
+    types::{MessageSignature, ObjectPath},
 };
 use anyhow::{Result, ensure};
 
@@ -39,15 +39,15 @@ impl MessageDecoder {
 
         let (body_signature, body) = match body_signature {
             Some(signature) => {
-                let mut signature_buf = DecodingBuffer::new(signature.as_bytes());
-                let signatures = SignatureDecoder::parse_multi(&mut signature_buf)?;
+                let mut signature_buf = DecodingBuffer::new(&signature);
+                let signature = SignatureDecoder::parse_message_signature(&mut signature_buf)?;
                 ensure!(signature_buf.is_eof());
                 let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
-                let body = ValueDecoder::read_multi(&mut buf, &signatures)?;
+                let body = ValueDecoder::decode_many(&mut buf, &signature.0)?;
                 assert!(buf.is_eof());
-                (signatures, body)
+                (signature, body)
             }
-            None => (vec![], vec![]),
+            None => (MessageSignature(vec![]), vec![]),
         };
 
         Ok(Message {

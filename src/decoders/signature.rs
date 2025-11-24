@@ -1,10 +1,13 @@
-use crate::{decoders::DecodingBuffer, types::Signature};
-use anyhow::{Context as _, Result, bail, ensure};
+use crate::{
+    decoders::DecodingBuffer,
+    types::{MessageSignature, Signature},
+};
+use anyhow::{Result, bail, ensure};
 
 pub(crate) struct SignatureDecoder;
 
 impl SignatureDecoder {
-    pub fn parse_one(buf: &mut DecodingBuffer) -> Result<Signature> {
+    pub fn parse(buf: &mut DecodingBuffer) -> Result<Signature> {
         match buf.next_u8()? {
             b'y' => Ok(Signature::Byte),
             b'b' => Ok(Signature::Bool),
@@ -24,7 +27,7 @@ impl SignatureDecoder {
             b'(' => {
                 let mut fields = vec![];
                 while buf.peek().is_some_and(|b| b != b')') {
-                    let field = Self::parse_one(buf)?;
+                    let field = Self::parse(buf)?;
                     fields.push(field);
                 }
                 ensure!(buf.next_u8().is_ok_and(|b| b == b')'));
@@ -32,23 +35,25 @@ impl SignatureDecoder {
             }
 
             b'a' => {
-                let item = Self::parse_one(buf)?;
+                let item = Self::parse(buf)?;
                 Ok(Signature::Array(Box::new(item)))
             }
 
-            b'v' => Ok(Signature::Variant),
+            b'v' => {
+                todo!()
+            }
 
             other => bail!("unknown signature member: {}", other as char),
         }
     }
 
-    pub fn parse_multi(buf: &mut DecodingBuffer) -> Result<Vec<Signature>> {
+    pub fn parse_message_signature(buf: &mut DecodingBuffer) -> Result<MessageSignature> {
         let mut out = vec![];
         while !buf.is_eof() {
-            let sig = Self::parse_one(buf)?;
+            let sig = Self::parse(buf)?;
             out.push(sig);
         }
-        Ok(out)
+        Ok(MessageSignature(out))
     }
 }
 
@@ -57,7 +62,7 @@ fn test_signature_decode() {
     let mut buf = DecodingBuffer::new(b"(isad(gh))");
 
     assert_eq!(
-        SignatureDecoder::parse_one(&mut buf).unwrap(),
+        SignatureDecoder::parse(&mut buf).unwrap(),
         Signature::Struct(vec![
             Signature::Int32,
             Signature::String,

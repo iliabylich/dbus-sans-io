@@ -18,3 +18,8 @@ pub use signature::Signature;
 
 mod value;
 pub use value::Value;
+
+mod message_signature;
+pub use message_signature::MessageSignature;
+
+pub(crate) use value::ValueRef;
