@@ -1,13 +1,13 @@
 use anyhow::{Context, Result, ensure};
 
 pub(crate) struct DecodingBuffer<'a> {
-    data: &'a [u8],
+    buf: &'a [u8],
     pos: usize,
 }
 
 impl<'a> DecodingBuffer<'a> {
-    pub(crate) fn new(data: &'a [u8]) -> Self {
-        Self { data, pos: 0 }
+    pub(crate) fn new(buf: &'a [u8]) -> Self {
+        Self { buf, pos: 0 }
     }
 
     pub(crate) fn set_pos(&mut self, pos: usize) {
@@ -24,11 +24,11 @@ impl<'a> DecodingBuffer<'a> {
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.data.len() - self.pos
+        self.buf.len() - self.pos
     }
 
     pub(crate) fn next_u8(&mut self) -> Result<u8> {
-        let byte = self.data.get(self.pos).context("EOF")?;
+        let byte = self.buf.get(self.pos).context("EOF")?;
         self.pos += 1;
         Ok(*byte)
     }
@@ -60,7 +60,7 @@ impl<'a> DecodingBuffer<'a> {
     }
 
     pub(crate) fn next_i8(&mut self) -> Result<i8> {
-        let byte = self.data.get(self.pos).context("EOF")?;
+        let byte = self.buf.get(self.pos).context("EOF")?;
         self.pos += 1;
         Ok(*byte as i8)
     }
@@ -105,13 +105,13 @@ impl<'a> DecodingBuffer<'a> {
     }
 
     pub(crate) fn next_n(&mut self, count: usize) -> Result<&[u8]> {
-        let bytes = self.data.get(self.pos..self.pos + count).context("EOF")?;
+        let bytes = self.buf.get(self.pos..self.pos + count).context("EOF")?;
         self.pos += count;
         Ok(bytes)
     }
 
     pub(crate) fn is_eof(&self) -> bool {
-        self.pos >= self.data.len()
+        self.pos >= self.buf.len()
     }
 
     pub(crate) fn skip_n(&mut self, count: usize) {
@@ -132,7 +132,7 @@ impl<'a> DecodingBuffer<'a> {
 impl std::fmt::Debug for DecodingBuffer<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DecodingBuffer")
-            .field("rem", &&self.data[self.pos..])
+            .field("rem", &&self.buf[self.pos..])
             .field("pos", &self.pos)
             .finish()
     }

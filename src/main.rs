@@ -23,7 +23,7 @@ mod fsm;
 mod guid;
 
 struct MessageBuilder {
-    data: Vec<u8>,
+    buf: Vec<u8>,
 }
 
 impl MessageBuilder {
@@ -40,52 +40,52 @@ impl MessageBuilder {
         header.extend_from_slice(&0u32.to_le_bytes()); // serial placeholder
         header.extend_from_slice(&0u32.to_le_bytes()); // length placeholder
 
-        Self { data: header }
+        Self { buf: header }
     }
 
     fn push_u32(&mut self, n: u32) {
-        self.data.extend_from_slice(&n.to_le_bytes());
+        self.buf.extend_from_slice(&n.to_le_bytes());
     }
 
     fn push_binary_string(&mut self, s: &[u8]) {
         self.push_u32(s.len() as u32);
-        self.data.extend_from_slice(s);
-        self.data.push(0); // NULL EOS
+        self.buf.extend_from_slice(s);
+        self.buf.push(0); // NULL EOS
     }
 
     fn push_signature(&mut self, sig: &[u8]) {
-        self.data.push(sig.len() as u8);
-        self.data.extend_from_slice(sig);
-        self.data.push(0); // NULL EOS
+        self.buf.push(sig.len() as u8);
+        self.buf.extend_from_slice(sig);
+        self.buf.push(0); // NULL EOS
     }
 
     fn align(&mut self) {
-        while self.data.len() % 8 != 0 {
-            self.data.push(0);
+        while self.buf.len() % 8 != 0 {
+            self.buf.push(0);
         }
     }
 
     fn add_string_field(&mut self, field: HeaderField, value: &[u8]) {
         self.align();
-        self.data.push(field as u8);
+        self.buf.push(field as u8);
         self.push_signature(b"s");
         self.push_binary_string(value);
     }
 
     fn add_object_path_field(&mut self, field: HeaderField, value: &[u8]) {
         self.align();
-        self.data.push(field as u8);
+        self.buf.push(field as u8);
         self.push_signature(b"o");
         self.push_binary_string(value);
     }
 
     fn finalize(mut self, serial: u32) -> Vec<u8> {
-        self.data[8..12].copy_from_slice(&serial.to_le_bytes());
-        let len = (self.data.len() - 16) as u32;
-        self.data[12..16].copy_from_slice(&len.to_le_bytes());
+        self.buf[8..12].copy_from_slice(&serial.to_le_bytes());
+        let len = (self.buf.len() - 16) as u32;
+        self.buf[12..16].copy_from_slice(&len.to_le_bytes());
         self.align();
 
-        self.data
+        self.buf
     }
 }
 
@@ -109,9 +109,9 @@ impl Connection {
         }
     }
 
-    fn write_all(&mut self, data: &[u8]) {
-        if let Err(err) = self.stream.write_all(data) {
-            panic!("failed to write {data:?}: {err:?}");
+    fn write_all(&mut self, buf: &[u8]) {
+        if let Err(err) = self.stream.write_all(buf) {
+            panic!("failed to write {buf:?}: {err:?}");
         }
     }
 
