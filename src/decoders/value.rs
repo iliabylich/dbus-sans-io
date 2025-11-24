@@ -1,7 +1,6 @@
 use crate::{
     decoders::DecodingBuffer,
-    encoders::EncodingBuffer,
-    types::{Signature, Value},
+    types::{ObjectPath, Signature, Value},
 };
 use anyhow::Result;
 
@@ -58,11 +57,11 @@ impl ValueDecoder {
         Ok(s)
     }
 
-    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
+    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<ObjectPath> {
         let len = Self::decode_u32(buf)? as usize;
         let bytes = buf.next_n(len)?.to_vec();
         buf.skip();
-        Ok(bytes)
+        Ok(ObjectPath(bytes))
     }
 
     pub(crate) fn decode_signature(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
@@ -265,7 +264,10 @@ fn test_read_f64() {
 #[test]
 fn test_read_object_path() {
     let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0").with_pos(1);
-    assert_eq!(ValueDecoder::decode_object_path(&mut buf).unwrap(), b"abcd");
+    assert_eq!(
+        ValueDecoder::decode_object_path(&mut buf).unwrap().0,
+        b"abcd"
+    );
     assert!(buf.is_eof())
 }
 

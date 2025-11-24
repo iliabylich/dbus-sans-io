@@ -4,7 +4,7 @@ use crate::{
         DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
         signature::SignatureDecoder,
     },
-    types::{MessageSignature, ObjectPath},
+    types::MessageSignature,
 };
 use anyhow::{Result, ensure};
 
@@ -34,8 +34,6 @@ impl MessageDecoder {
             body_signature,
             unix_fds,
         } = HeaderFieldsDecoder::new(buffer)?;
-
-        let path = path.map(ObjectPath::new);
 
         let (body_signature, body) = match body_signature {
             Some(signature) => {

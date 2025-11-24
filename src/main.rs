@@ -15,79 +15,13 @@ mod encoders;
 mod types;
 
 use crate::{
+    encoders::MessageEncoder,
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
-    types::{Flags, HeaderField, Message, MessageType, Value},
+    types::{Flags, Message, MessageSignature, MessageType, ObjectPath, Value},
 };
 
 mod fsm;
 mod guid;
-
-struct MessageBuilder {
-    buf: Vec<u8>,
-}
-
-impl MessageBuilder {
-    const LITTLE_ENDIAN: u8 = b'l';
-    const PROTOCOL_VERSION: u8 = 1;
-
-    fn new(message_type: MessageType, flags: u8, body_len: u32) -> Self {
-        let mut header = Vec::new();
-        header.push(Self::LITTLE_ENDIAN);
-        header.push(message_type as u8);
-        header.push(flags);
-        header.push(Self::PROTOCOL_VERSION);
-        header.extend_from_slice(&body_len.to_le_bytes());
-        header.extend_from_slice(&0u32.to_le_bytes()); // serial placeholder
-        header.extend_from_slice(&0u32.to_le_bytes()); // length placeholder
-
-        Self { buf: header }
-    }
-
-    fn push_u32(&mut self, n: u32) {
-        self.buf.extend_from_slice(&n.to_le_bytes());
-    }
-
-    fn push_binary_string(&mut self, s: &[u8]) {
-        self.push_u32(s.len() as u32);
-        self.buf.extend_from_slice(s);
-        self.buf.push(0); // NULL EOS
-    }
-
-    fn push_signature(&mut self, sig: &[u8]) {
-        self.buf.push(sig.len() as u8);
-        self.buf.extend_from_slice(sig);
-        self.buf.push(0); // NULL EOS
-    }
-
-    fn align(&mut self) {
-        while self.buf.len() % 8 != 0 {
-            self.buf.push(0);
-        }
-    }
-
-    fn add_string_field(&mut self, field: HeaderField, value: &[u8]) {
-        self.align();
-        self.buf.push(field as u8);
-        self.push_signature(b"s");
-        self.push_binary_string(value);
-    }
-
-    fn add_object_path_field(&mut self, field: HeaderField, value: &[u8]) {
-        self.align();
-        self.buf.push(field as u8);
-        self.push_signature(b"o");
-        self.push_binary_string(value);
-    }
-
-    fn finalize(mut self, serial: u32) -> Vec<u8> {
-        self.buf[8..12].copy_from_slice(&serial.to_le_bytes());
-        let len = (self.buf.len() - 16) as u32;
-        self.buf[12..16].copy_from_slice(&len.to_le_bytes());
-        self.align();
-
-        self.buf
-    }
-}
 
 struct Connection {
     stream: UnixStream,
@@ -145,21 +79,32 @@ impl Connection {
         }
     }
 
-    fn send_message(&mut self, builder: MessageBuilder) -> u32 {
+    fn send_message(&mut self, message: &mut Message) -> Result<u32> {
         let serial = self.serial.increment_and_get();
-        let message = builder.finalize(serial);
+        message.serial = serial;
+        let message = MessageEncoder::encode(message)?;
         self.write_all(&message);
-        serial
+        Ok(serial)
     }
 
-    fn send_hello(&mut self) -> u32 {
-        let mut msg = MessageBuilder::new(MessageType::MethodCall, 0, 0);
-        msg.add_object_path_field(HeaderField::Path, b"/org/freedesktop/DBus");
-        msg.add_string_field(HeaderField::Destination, b"org.freedesktop.DBus");
-        msg.add_string_field(HeaderField::Interface, b"org.freedesktop.DBus");
-        msg.add_string_field(HeaderField::Member, b"Hello");
+    fn send_hello(&mut self) -> Result<u32> {
+        let mut message = Message {
+            message_type: MessageType::MethodCall,
+            flags: Flags { byte: 0 },
+            serial: 0,
+            member: Some(String::from("Hello")),
+            interface: Some(String::from("org.freedesktop.DBus")),
+            path: Some(ObjectPath(b"/org/freedesktop/DBus".to_vec())),
+            error_name: None,
+            reply_serial: None,
+            destination: Some(String::from("org.freedesktop.DBus")),
+            sender: None,
+            body_signature: MessageSignature(vec![]),
+            unix_fds: None,
+            body: vec![],
+        };
 
-        self.send_message(msg)
+        self.send_message(&mut message)
     }
 
     fn read_message(&mut self) -> Result<Message> {

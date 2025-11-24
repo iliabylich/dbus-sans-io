@@ -1,4 +1,4 @@
-use crate::types::Signature;
+use crate::types::{ObjectPath, Signature};
 use anyhow::{Result, bail};
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ pub enum Value {
     UnixFD(u32),
 
     String(String),
-    ObjectPath(Vec<u8>),
+    ObjectPath(ObjectPath),
     Signature(Vec<u8>),
     Struct(Vec<Value>),
     Array(Vec<Value>),
@@ -63,7 +63,7 @@ impl<'a> From<&'a Value> for ValueRef<'a> {
             Value::Double(v) => Self::Double(*v),
             Value::UnixFD(v) => Self::UnixFD(*v),
             Value::String(v) => Self::String(v),
-            Value::ObjectPath(v) => Self::ObjectPath(v),
+            Value::ObjectPath(v) => Self::ObjectPath(&v.0),
             Value::Signature(v) => Self::Signature(v),
             Value::Struct(v) => Self::Struct(v),
             Value::Array(v) => Self::Array(v),

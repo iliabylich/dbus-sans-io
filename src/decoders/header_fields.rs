@@ -1,12 +1,12 @@
 use crate::{
     decoders::{DecodingBuffer, SignatureDecoder, ValueDecoder},
-    types::{HeaderField, Value},
+    types::{HeaderField, ObjectPath, Value},
 };
 use anyhow::{Result, bail, ensure};
 
 #[derive(Default, Debug)]
 pub(crate) struct HeaderFieldsDecoder {
-    pub(crate) path: Option<Vec<u8>>,
+    pub(crate) path: Option<ObjectPath>,
     pub(crate) interface: Option<String>,
     pub(crate) member: Option<String>,
     pub(crate) error_name: Option<String>,

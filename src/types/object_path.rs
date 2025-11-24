@@ -1,4 +1,4 @@
-pub struct ObjectPath(Vec<u8>);
+pub struct ObjectPath(pub Vec<u8>);
 
 impl ObjectPath {
     pub fn new(bytes: Vec<u8>) -> Self {

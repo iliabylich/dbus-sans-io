@@ -63,12 +63,6 @@ impl<'a> DecodingBuffer<'a> {
         ]))
     }
 
-    pub(crate) fn next_i8(&mut self) -> Result<i8> {
-        let byte = self.buf.get(self.pos).context("EOF")?;
-        self.pos += 1;
-        Ok(*byte as i8)
-    }
-
     pub(crate) fn next_i16(&mut self) -> Result<i16> {
         Ok(i16::from_le_bytes([self.next_u8()?, self.next_u8()?]))
     }
