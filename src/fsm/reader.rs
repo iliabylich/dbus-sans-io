@@ -21,10 +21,6 @@ pub enum ReaderNextAction<'a> {
 
 impl ReaderFSM {
     pub fn new() -> Self {
-        Self::new_reading_header()
-    }
-
-    fn new_reading_header() -> Self {
         Self::ReadingHeadar {
             buf: ReadBuffer::new(HEADER_LEN),
         }
@@ -32,8 +28,8 @@ impl ReaderFSM {
 
     pub fn next_action(&mut self) -> ReaderNextAction<'_> {
         match self {
-            Self::ReadingHeadar { buf } => ReaderNextAction::Read(buf.remainder()),
-            Self::ReadingBody { buf } => ReaderNextAction::Read(buf.remainder()),
+            Self::ReadingHeadar { buf } => ReaderNextAction::Read(buf.remaining_part()),
+            Self::ReadingBody { buf } => ReaderNextAction::Read(buf.remaining_part()),
             Self::Done { message } => {
                 let message = std::mem::take(message);
                 *self = Self::new();
@@ -45,9 +41,9 @@ impl ReaderFSM {
     pub fn done_reading(&mut self, len: usize) -> Result<()> {
         match self {
             Self::ReadingHeadar { buf } => {
-                buf.written(len);
+                buf.add_pos(len);
                 if buf.is_full() {
-                    let header = HeaderDecoder::decode(DecodingBuffer::new(buf.as_bytes()))?;
+                    let header = HeaderDecoder::decode(DecodingBuffer::new(buf.filled_part()))?;
                     buf.resize(header.full_message_size());
                     *self = Self::ReadingBody { buf: buf.take() }
                 }
@@ -55,7 +51,7 @@ impl ReaderFSM {
                 Ok(())
             }
             Self::ReadingBody { buf } => {
-                buf.written(len);
+                buf.add_pos(len);
                 if buf.is_full() {
                     let message = MessageDecoder::decode(buf.take().unwrap())?;
                     *self = Self::Done { message }

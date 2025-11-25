@@ -12,11 +12,19 @@ impl ReadBuffer {
         }
     }
 
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub(crate) fn resize(&mut self, new_size: usize) {
+        let len = self.buf.len();
+        self.buf.reserve_exact(new_size - len);
+        while self.buf.len() != new_size {
+            self.buf.push(0)
+        }
+    }
+
+    pub(crate) fn filled_part(&self) -> &[u8] {
         &self.buf[..self.pos]
     }
 
-    pub(crate) fn remainder(&mut self) -> &mut [u8] {
+    pub(crate) fn remaining_part(&mut self) -> &mut [u8] {
         &mut self.buf[self.pos..]
     }
 
@@ -29,20 +37,12 @@ impl ReadBuffer {
         self.buf
     }
 
-    pub(crate) fn written(&mut self, len: usize) {
+    pub(crate) fn add_pos(&mut self, len: usize) {
         self.pos += len;
         assert!(self.pos <= self.buf.len())
     }
 
     pub(crate) fn take(&mut self) -> Self {
         std::mem::take(self)
-    }
-
-    pub(crate) fn resize(&mut self, new_size: usize) {
-        let len = self.buf.len();
-        self.buf.reserve_exact(new_size - len);
-        while self.buf.len() != new_size {
-            self.buf.push(0)
-        }
     }
 }

@@ -16,7 +16,7 @@ mod types;
 
 use crate::{
     encoders::MessageEncoder,
-    fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
+    fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM, WriterNextAction},
     types::{Flags, GUID, Message, MessageSignature, MessageType, ObjectPath, Value},
 };
 
@@ -39,12 +39,6 @@ impl Connection {
         Self {
             stream,
             serial: Serial::zero(),
-        }
-    }
-
-    fn write_all(&mut self, buf: &[u8]) {
-        if let Err(err) = self.stream.write_all(buf) {
-            panic!("failed to write {buf:?}: {err:?}");
         }
     }
 
@@ -81,8 +75,26 @@ impl Connection {
     fn send_message(&mut self, message: &mut Message) -> Result<u32> {
         let serial = self.serial.increment_and_get();
         message.serial = serial;
-        let message = MessageEncoder::encode(message)?;
-        self.write_all(&message);
+        let buf = MessageEncoder::encode(message)?;
+
+        let mut fsm = WriterFSM::new();
+        fsm.enqueue(buf);
+
+        loop {
+            match fsm.next_action() {
+                WriterNextAction::Nothing => break,
+                WriterNextAction::Write(buf) => match self.stream.write(buf) {
+                    Ok(len) => {
+                        fsm.done_writing(len)?;
+                    }
+                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                        continue;
+                    }
+                    Err(err) => return Err(err.into()),
+                },
+            }
+        }
+
         Ok(serial)
     }
 

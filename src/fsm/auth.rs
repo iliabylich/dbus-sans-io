@@ -36,12 +36,12 @@ impl AuthFSM {
                 let rem = &AUTH_EXTERNAL[*written..];
                 AuthNextAction::Write(rem)
             }
-            Self::ReadingData { buf } => AuthNextAction::Read(buf.remainder()),
+            Self::ReadingData { buf } => AuthNextAction::Read(buf.remaining_part()),
             Self::WritingData { written, .. } => {
                 let rem = &DATA[*written..];
                 AuthNextAction::Write(rem)
             }
-            Self::ReadingGUID { buf } => AuthNextAction::Read(buf.remainder()),
+            Self::ReadingGUID { buf } => AuthNextAction::Read(buf.remaining_part()),
             Self::WritingBegin { written, .. } => {
                 let rem = &BEGIN[*written..];
                 AuthNextAction::Write(rem)
@@ -108,7 +108,7 @@ impl AuthFSM {
                 bail!("malformed state, you were supposed to WRITE, not READ (in {self:?})");
             }
             Self::ReadingData { buf } => {
-                buf.written(len);
+                buf.add_pos(len);
                 if buf.is_full() {
                     let buf = buf.take().unwrap();
                     ensure!(buf == DATA);
@@ -120,7 +120,7 @@ impl AuthFSM {
                 bail!("malformed state, you were supposed to WRITE, not READ (in {self:?})");
             }
             Self::ReadingGUID { buf } => {
-                buf.written(len);
+                buf.add_pos(len);
                 if buf.is_full() {
                     let guid = GUID::try_from(buf.take().unwrap())?;
                     *self = Self::WritingBegin { written: 0, guid };
