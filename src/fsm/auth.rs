@@ -1,4 +1,4 @@
-use crate::{GUID, fsm::ReadBuffer};
+use crate::{fsm::ReadBuffer, types::GUID};
 use anyhow::{Result, bail, ensure};
 
 #[derive(Debug)]
@@ -8,20 +8,19 @@ pub enum AuthFSM {
     ReadingData { buf: ReadBuffer },
     WritingData { written: usize },
     ReadingGUID { buf: ReadBuffer },
-    WritingBegin { written: usize, guid: GUID },
-    Done { guid: GUID },
+    WritingBegin { written: usize, buf: Vec<u8> },
+    Done { buf: Vec<u8> },
 }
 
 const AUTH_EXTERNAL: &[u8] = b"AUTH EXTERNAL\r\n";
 const DATA: &[u8] = b"DATA\r\n";
-const GUID_LENGTH: usize = 37;
 const BEGIN: &[u8] = b"BEGIN\r\n";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AuthNextAction<'a> {
     Write(&'a [u8]),
     Read(&'a mut [u8]),
-    Done(GUID),
+    Done(Vec<u8>),
 }
 
 impl AuthFSM {
@@ -46,7 +45,7 @@ impl AuthFSM {
                 let rem = &BEGIN[*written..];
                 AuthNextAction::Write(rem)
             }
-            Self::Done { guid } => AuthNextAction::Done(std::mem::take(guid)),
+            Self::Done { buf: guid } => AuthNextAction::Done(std::mem::take(guid)),
         }
     }
 
@@ -75,7 +74,7 @@ impl AuthFSM {
                 ensure!(*written <= DATA.len());
                 if *written == DATA.len() {
                     *self = Self::ReadingGUID {
-                        buf: ReadBuffer::new(GUID_LENGTH),
+                        buf: ReadBuffer::new(GUID::LENGTH),
                     };
                 }
                 Ok(())
@@ -83,12 +82,12 @@ impl AuthFSM {
             Self::ReadingGUID { .. } => {
                 bail!("malformed state, you were supposed to READ, not WRITE (in {self:?})");
             }
-            Self::WritingBegin { written, guid } => {
+            Self::WritingBegin { written, buf: guid } => {
                 *written += len;
                 ensure!(*written <= BEGIN.len());
                 if *written == BEGIN.len() {
                     *self = Self::Done {
-                        guid: std::mem::take(guid),
+                        buf: std::mem::take(guid),
                     }
                 }
                 Ok(())
@@ -122,8 +121,10 @@ impl AuthFSM {
             Self::ReadingGUID { buf } => {
                 buf.add_pos(len);
                 if buf.is_full() {
-                    let guid = GUID::try_from(buf.take().unwrap())?;
-                    *self = Self::WritingBegin { written: 0, guid };
+                    *self = Self::WritingBegin {
+                        written: 0,
+                        buf: buf.take().unwrap(),
+                    };
                 }
                 Ok(())
             }
@@ -179,5 +180,8 @@ fn test_auth_fsm() {
     let AuthNextAction::Done(guid) = dbg!(fsm.next_action()) else {
         panic!("wrong next action");
     };
-    assert_eq!(guid.as_str().unwrap(), "a97099b37b54cdc2a686559c6922fdeb");
+    assert_eq!(
+        GUID::try_from(guid).unwrap().as_str().unwrap(),
+        "a97099b37b54cdc2a686559c6922fdeb"
+    );
 }

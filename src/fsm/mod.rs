@@ -9,3 +9,6 @@ pub(crate) use read_buffer::ReadBuffer;
 
 mod writer;
 pub(crate) use writer::{WriterFSM, WriterNextAction};
+
+mod full;
+pub(crate) use full::FullFSM;

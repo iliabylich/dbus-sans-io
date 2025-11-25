@@ -1,6 +1,6 @@
 use crate::{
     encoders::{EncodingBuffer, HeaderEncoder, HeaderFieldsEncoder},
-    types::Message,
+    types::{Header, Message},
 };
 use anyhow::Result;
 
@@ -10,7 +10,7 @@ impl MessageEncoder {
     pub(crate) fn encode(message: &Message) -> Result<Vec<u8>> {
         let mut buf = EncodingBuffer::new();
 
-        HeaderEncoder::encode(&mut buf, message.message_type, message.flags);
+        HeaderEncoder::encode_as_zeroes(&mut buf);
 
         HeaderFieldsEncoder::encode(
             &mut buf,
@@ -27,11 +27,19 @@ impl MessageEncoder {
 
         // TODO: write body once we have some
         assert_eq!(message.body.len(), 0);
-        let body_len = buf.size() - HeaderEncoder::HEADER_LEN;
+        let body_len = buf.size() - Header::LENGTH;
         buf.align(8);
 
-        HeaderEncoder::encode_body_len(&mut buf, body_len as u32)?;
-        HeaderEncoder::encode_serial(&mut buf, message.serial)?;
+        HeaderEncoder::reencode(
+            &mut buf,
+            Header {
+                message_type: message.message_type,
+                flags: message.flags,
+                body_len: body_len,
+                serial: message.serial,
+                header_fields_len: 0,
+            },
+        )?;
 
         Ok(buf.done())
     }

@@ -4,7 +4,7 @@ use crate::{
         DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
         signature::SignatureDecoder,
     },
-    types::MessageSignature,
+    types::{Header, MessageSignature},
 };
 use anyhow::{Result, ensure};
 
@@ -12,7 +12,7 @@ pub(crate) struct MessageDecoder;
 
 impl MessageDecoder {
     pub(crate) fn decode(bytes: Vec<u8>) -> Result<Message> {
-        let buf = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH]);
+        let buf = DecodingBuffer::new(&bytes[..Header::LENGTH]);
         let header = HeaderDecoder::decode(buf)?;
 
         let message_type = header.message_type;
@@ -20,8 +20,8 @@ impl MessageDecoder {
         let serial = header.serial;
         let header_fields_len = header.header_fields_len;
 
-        let buffer = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH + header_fields_len])
-            .with_pos(HeaderDecoder::LENGTH);
+        let buffer = DecodingBuffer::new(&bytes[..Header::LENGTH + header_fields_len])
+            .with_pos(Header::LENGTH);
 
         let HeaderFieldsDecoder {
             member,

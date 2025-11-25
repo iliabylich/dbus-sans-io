@@ -25,4 +25,7 @@ pub use message_signature::MessageSignature;
 mod guid;
 pub use guid::GUID;
 
+mod header;
+pub use header::Header;
+
 pub(crate) use value::ValueRef;

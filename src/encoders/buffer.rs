@@ -59,6 +59,11 @@ impl EncodingBuffer {
         self.buf
     }
 
+    pub(crate) fn set_u8(&mut self, at: usize, value: u8) -> Result<()> {
+        *self.buf.get_mut(at).context("out of bounds")? = value;
+        Ok(())
+    }
+
     pub(crate) fn set_u32(&mut self, at: usize, value: u32) -> Result<()> {
         self.buf
             .get_mut(at..at + 4)

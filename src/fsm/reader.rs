@@ -1,28 +1,26 @@
 use crate::{
-    Message,
-    decoders::{DecodingBuffer, HeaderDecoder, MessageDecoder},
+    decoders::{DecodingBuffer, HeaderDecoder},
     fsm::ReadBuffer,
+    types::Header,
 };
 use anyhow::{Result, bail};
-
-const HEADER_LEN: usize = 16;
 
 #[derive(Debug)]
 pub enum ReaderFSM {
     ReadingHeadar { buf: ReadBuffer },
     ReadingBody { buf: ReadBuffer },
-    Done { message: Message },
+    Done { buf: Vec<u8> },
 }
 
 pub enum ReaderNextAction<'a> {
     Read(&'a mut [u8]),
-    Message(Message),
+    Message(Vec<u8>),
 }
 
 impl ReaderFSM {
     pub fn new() -> Self {
         Self::ReadingHeadar {
-            buf: ReadBuffer::new(HEADER_LEN),
+            buf: ReadBuffer::new(Header::LENGTH),
         }
     }
 
@@ -30,10 +28,10 @@ impl ReaderFSM {
         match self {
             Self::ReadingHeadar { buf } => ReaderNextAction::Read(buf.remaining_part()),
             Self::ReadingBody { buf } => ReaderNextAction::Read(buf.remaining_part()),
-            Self::Done { message } => {
-                let message = std::mem::take(message);
+            Self::Done { buf } => {
+                let buf = std::mem::take(buf);
                 *self = Self::new();
-                ReaderNextAction::Message(message)
+                ReaderNextAction::Message(buf)
             }
         }
     }
@@ -53,8 +51,9 @@ impl ReaderFSM {
             Self::ReadingBody { buf } => {
                 buf.add_pos(len);
                 if buf.is_full() {
-                    let message = MessageDecoder::decode(buf.take().unwrap())?;
-                    *self = Self::Done { message }
+                    *self = Self::Done {
+                        buf: buf.take().unwrap(),
+                    }
                 }
 
                 Ok(())

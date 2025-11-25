@@ -15,6 +15,7 @@ mod encoders;
 mod types;
 
 use crate::{
+    decoders::MessageDecoder,
     encoders::MessageEncoder,
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM, WriterNextAction},
     types::{Flags, GUID, Message, MessageSignature, MessageType, ObjectPath, Value},
@@ -67,7 +68,7 @@ impl Connection {
                     Err(err) => return Err(err.into()),
                 },
 
-                AuthNextAction::Done(guid) => return Ok(guid),
+                AuthNextAction::Done(buf) => return Ok(GUID::try_from(buf)?),
             }
         }
     }
@@ -134,7 +135,8 @@ impl Connection {
                     Err(err) => return Err(err.into()),
                 },
 
-                ReaderNextAction::Message(message) => {
+                ReaderNextAction::Message(buf) => {
+                    let message = MessageDecoder::decode(buf)?;
                     return Ok(message);
                 }
             }
