@@ -4,9 +4,6 @@ use std::{
     os::unix::net::UnixStream,
 };
 
-mod io_operation;
-pub use io_operation::{IoOperation, IoReader, IoRoundtrip, IoWriter};
-
 mod serial;
 pub(crate) use serial::Serial;
 
