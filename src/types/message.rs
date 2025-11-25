@@ -16,7 +16,7 @@ pub struct Message {
     pub reply_serial: Option<u32>,
     pub destination: Option<String>,
     pub sender: Option<String>,
-    pub body_signature: MessageSignature,
+    pub signature: MessageSignature,
     pub unix_fds: Option<u32>,
 
     pub body: Vec<Value>,

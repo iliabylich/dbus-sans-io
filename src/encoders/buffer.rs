@@ -14,7 +14,7 @@ impl EncodingBuffer {
     }
 
     pub(crate) fn align(&mut self, align: usize) {
-        while self.size() % align != 0 {
+        while !self.size().is_multiple_of(align) {
             self.encode_u8(0);
         }
     }
@@ -57,11 +57,6 @@ impl EncodingBuffer {
 
     pub(crate) fn done(self) -> Vec<u8> {
         self.buf
-    }
-
-    pub(crate) fn set_byte(&mut self, at: usize, value: u8) -> Result<()> {
-        *self.buf.get_mut(at).context("out of bounds")? = value;
-        Ok(())
     }
 
     pub(crate) fn set_u32(&mut self, at: usize, value: u32) -> Result<()> {

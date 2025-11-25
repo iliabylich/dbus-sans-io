@@ -1,6 +1,7 @@
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum HeaderField {
+    #[default]
     Invalid = 0,
     Path = 1,
     Interface = 2,

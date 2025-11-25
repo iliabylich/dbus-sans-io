@@ -18,10 +18,10 @@ impl MessageEncoder {
             message.interface.as_ref(),
             message.member.as_ref(),
             message.error_name.as_ref(),
-            message.reply_serial.clone(),
+            message.reply_serial,
             message.destination.as_ref(),
             message.sender.as_ref(),
-            &message.body_signature,
+            &message.signature,
             message.unix_fds,
         )?;
 

@@ -13,7 +13,7 @@ pub(crate) struct HeaderFieldsDecoder {
     pub(crate) reply_serial: Option<u32>,
     pub(crate) destination: Option<String>,
     pub(crate) sender: Option<String>,
-    pub(crate) body_signature: Option<Vec<u8>>,
+    pub(crate) signature: Option<Vec<u8>>,
     pub(crate) unix_fds: Option<u32>,
 }
 
@@ -26,23 +26,11 @@ impl HeaderFieldsDecoder {
         let mut reply_serial = None;
         let mut destination = None;
         let mut sender = None;
-        let mut body_signature = None;
+        let mut signature = None;
         let mut unix_fds = None;
 
         while !buf.is_eof() {
-            buf.align(8)?;
-
-            let Ok(header_field) = buf.next_u8() else {
-                break;
-            };
-            let header_field = HeaderField::from(header_field);
-
-            let signature = ValueDecoder::decode_signature(&mut buf)?;
-            let mut signature_buf = DecodingBuffer::new(&signature);
-            let signature = SignatureDecoder::parse(&mut signature_buf)?;
-            ensure!(signature_buf.is_eof());
-
-            let value = ValueDecoder::decode_value(&mut buf, &signature)?;
+            let (header_field, value) = read_header(&mut buf)?;
 
             match (header_field, value) {
                 (HeaderField::Invalid, value) => {
@@ -70,7 +58,7 @@ impl HeaderFieldsDecoder {
                     sender = Some(value);
                 }
                 (HeaderField::Signature, Value::Signature(value)) => {
-                    body_signature = Some(value);
+                    signature = Some(value);
                 }
                 (HeaderField::UnixFds, Value::UInt32(value)) => {
                     unix_fds = Some(value);
@@ -91,8 +79,26 @@ impl HeaderFieldsDecoder {
             reply_serial,
             destination,
             sender,
-            body_signature,
+            signature,
             unix_fds,
         })
     }
+}
+
+fn read_header(buf: &mut DecodingBuffer<'_>) -> Result<(HeaderField, Value)> {
+    buf.align(8)?;
+
+    let header_field = HeaderField::from(buf.next_u8()?);
+
+    let signature = {
+        let content = ValueDecoder::decode_signature(buf)?;
+        let mut buf = DecodingBuffer::new(&content);
+        let signature = SignatureDecoder::parse(&mut buf)?;
+        ensure!(buf.is_eof());
+        signature
+    };
+
+    let value = ValueDecoder::decode_value(buf, &signature)?;
+
+    Ok((header_field, value))
 }

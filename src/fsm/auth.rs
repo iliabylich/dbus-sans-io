@@ -1,4 +1,4 @@
-use crate::{fsm::ReadBuffer, guid::GUID};
+use crate::{GUID, fsm::ReadBuffer};
 use anyhow::{Result, bail, ensure};
 
 #[derive(Debug)]

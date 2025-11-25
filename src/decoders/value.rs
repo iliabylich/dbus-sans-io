@@ -152,7 +152,7 @@ impl ValueDecoder {
     ) -> Result<Vec<Value>> {
         let mut out = vec![];
         for signature in signatures {
-            let value = Self::decode_value(buf, &signature)?;
+            let value = Self::decode_value(buf, signature)?;
             out.push(value);
         }
         Ok(out)

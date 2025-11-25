@@ -17,11 +17,10 @@ mod types;
 use crate::{
     encoders::MessageEncoder,
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction},
-    types::{Flags, Message, MessageSignature, MessageType, ObjectPath, Value},
+    types::{Flags, GUID, Message, MessageSignature, MessageType, ObjectPath, Value},
 };
 
 mod fsm;
-mod guid;
 
 struct Connection {
     stream: UnixStream,
@@ -49,7 +48,7 @@ impl Connection {
         }
     }
 
-    fn auth(&mut self) -> Result<guid::GUID> {
+    fn auth(&mut self) -> Result<GUID> {
         let mut fsm = AuthFSM::new();
 
         loop {
@@ -99,7 +98,7 @@ impl Connection {
             reply_serial: None,
             destination: Some(String::from("org.freedesktop.DBus")),
             sender: None,
-            body_signature: MessageSignature(vec![]),
+            signature: MessageSignature(vec![]),
             unix_fds: None,
             body: vec![],
         };
@@ -153,7 +152,7 @@ fn main() {
     let mut dbus = Connection::new_session();
     dbg!(dbus.auth().unwrap());
 
-    dbus.send_hello();
+    dbus.send_hello().unwrap();
 
     loop {
         let msg = dbus.read_message().unwrap();

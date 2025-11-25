@@ -12,8 +12,8 @@ pub(crate) struct MessageDecoder;
 
 impl MessageDecoder {
     pub(crate) fn decode(bytes: Vec<u8>) -> Result<Message> {
-        let buffer = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH]);
-        let header = HeaderDecoder::decode(buffer)?;
+        let buf = DecodingBuffer::new(&bytes[..HeaderDecoder::LENGTH]);
+        let header = HeaderDecoder::decode(buf)?;
 
         let message_type = header.message_type;
         let flags = header.flags;
@@ -31,18 +31,26 @@ impl MessageDecoder {
             reply_serial,
             destination,
             sender,
-            body_signature,
+            signature,
             unix_fds,
         } = HeaderFieldsDecoder::new(buffer)?;
 
-        let (body_signature, body) = match body_signature {
+        let (signature, body) = match signature {
             Some(signature) => {
-                let mut signature_buf = DecodingBuffer::new(&signature);
-                let signature = SignatureDecoder::parse_message_signature(&mut signature_buf)?;
-                ensure!(signature_buf.is_eof());
-                let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
-                let body = ValueDecoder::decode_many(&mut buf, &signature.0)?;
-                assert!(buf.is_eof());
+                let signature = {
+                    let mut buf = DecodingBuffer::new(&signature);
+                    let signature = SignatureDecoder::parse_message_signature(&mut buf)?;
+                    ensure!(buf.is_eof());
+                    signature
+                };
+
+                let body = {
+                    let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
+                    let body = ValueDecoder::decode_many(&mut buf, &signature.0)?;
+                    assert!(buf.is_eof());
+                    body
+                };
+
                 (signature, body)
             }
             None => (MessageSignature(vec![]), vec![]),
@@ -60,7 +68,7 @@ impl MessageDecoder {
             reply_serial,
             destination,
             sender,
-            body_signature,
+            signature,
             unix_fds,
 
             body,

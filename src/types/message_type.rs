@@ -1,17 +1,12 @@
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MessageType {
+    #[default]
     Invalid = 0,
     MethodCall = 1,
     MethodReturn = 2,
     Error = 3,
     Signal = 4,
-}
-
-impl Default for MessageType {
-    fn default() -> Self {
-        Self::Invalid
-    }
 }
 
 impl From<u8> for MessageType {

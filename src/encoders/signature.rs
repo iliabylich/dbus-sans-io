@@ -29,7 +29,7 @@ impl SignatureEncoder {
             }
             Signature::Array(item) => {
                 buf.encode_u8(b'a');
-                Self::encode(buf, &*item);
+                Self::encode(buf, item);
             }
             Signature::Variant => {
                 buf.encode_u8(b'v');

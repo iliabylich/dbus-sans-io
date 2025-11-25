@@ -19,10 +19,6 @@ impl<'a> DecodingBuffer<'a> {
         self
     }
 
-    pub(crate) fn pos(&self) -> usize {
-        self.pos
-    }
-
     pub(crate) fn len(&self) -> usize {
         self.buf.len() - self.pos
     }
