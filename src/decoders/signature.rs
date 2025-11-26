@@ -1,42 +1,42 @@
 use crate::{
     decoders::DecodingBuffer,
-    types::{MessageSignature, Signature},
+    types::{CompleteType, Signature},
 };
 use anyhow::{Result, bail, ensure};
 
 pub(crate) struct SignatureDecoder;
 
 impl SignatureDecoder {
-    pub fn parse(buf: &mut DecodingBuffer) -> Result<Signature> {
+    pub(crate) fn decode_complete_type(buf: &mut DecodingBuffer) -> Result<CompleteType> {
         match buf.next_u8()? {
-            b'y' => Ok(Signature::Byte),
-            b'b' => Ok(Signature::Bool),
-            b'n' => Ok(Signature::Int16),
-            b'q' => Ok(Signature::UInt16),
-            b'i' => Ok(Signature::Int32),
-            b'u' => Ok(Signature::UInt32),
-            b'x' => Ok(Signature::Int64),
-            b't' => Ok(Signature::UInt64),
-            b'd' => Ok(Signature::Double),
-            b'h' => Ok(Signature::UnixFD),
+            b'y' => Ok(CompleteType::Byte),
+            b'b' => Ok(CompleteType::Bool),
+            b'n' => Ok(CompleteType::Int16),
+            b'q' => Ok(CompleteType::UInt16),
+            b'i' => Ok(CompleteType::Int32),
+            b'u' => Ok(CompleteType::UInt32),
+            b'x' => Ok(CompleteType::Int64),
+            b't' => Ok(CompleteType::UInt64),
+            b'd' => Ok(CompleteType::Double),
+            b'h' => Ok(CompleteType::UnixFD),
 
-            b's' => Ok(Signature::String),
-            b'o' => Ok(Signature::ObjectPath),
-            b'g' => Ok(Signature::Signature),
+            b's' => Ok(CompleteType::String),
+            b'o' => Ok(CompleteType::ObjectPath),
+            b'g' => Ok(CompleteType::Signature),
 
             b'(' => {
                 let mut fields = vec![];
                 while buf.peek().is_some_and(|b| b != b')') {
-                    let field = Self::parse(buf)?;
+                    let field = Self::decode_complete_type(buf)?;
                     fields.push(field);
                 }
                 ensure!(buf.next_u8().is_ok_and(|b| b == b')'));
-                Ok(Signature::Struct(fields))
+                Ok(CompleteType::Struct(fields))
             }
 
             b'a' => {
-                let item = Self::parse(buf)?;
-                Ok(Signature::Array(Box::new(item)))
+                let item = Self::decode_complete_type(buf)?;
+                Ok(CompleteType::Array(Box::new(item)))
             }
 
             b'v' => {
@@ -47,13 +47,13 @@ impl SignatureDecoder {
         }
     }
 
-    pub fn parse_message_signature(buf: &mut DecodingBuffer) -> Result<MessageSignature> {
-        let mut out = vec![];
+    pub fn decode_signature(buf: &mut DecodingBuffer) -> Result<Signature> {
+        let mut sig = Signature { items: vec![] };
         while !buf.is_eof() {
-            let sig = Self::parse(buf)?;
-            out.push(sig);
+            let complete_type = Self::decode_complete_type(buf)?;
+            sig.items.push(complete_type);
         }
-        Ok(MessageSignature(out))
+        Ok(sig)
     }
 }
 
@@ -62,12 +62,12 @@ fn test_signature_decode() {
     let mut buf = DecodingBuffer::new(b"(isad(gh))");
 
     assert_eq!(
-        SignatureDecoder::parse(&mut buf).unwrap(),
-        Signature::Struct(vec![
-            Signature::Int32,
-            Signature::String,
-            Signature::Array(Box::new(Signature::Double)),
-            Signature::Struct(vec![Signature::Signature, Signature::UnixFD])
+        SignatureDecoder::decode_complete_type(&mut buf).unwrap(),
+        CompleteType::Struct(vec![
+            CompleteType::Int32,
+            CompleteType::String,
+            CompleteType::Array(Box::new(CompleteType::Double)),
+            CompleteType::Struct(vec![CompleteType::Signature, CompleteType::UnixFD])
         ])
     );
 }

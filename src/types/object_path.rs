@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct ObjectPath(pub Vec<u8>);
 
 impl ObjectPath {

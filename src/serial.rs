@@ -8,7 +8,7 @@ pub(crate) struct Serial {
 impl Serial {
     pub(crate) fn zero() -> Self {
         Self {
-            counter: Rc::new(RefCell::new(1)),
+            counter: Rc::new(RefCell::new(0)),
         }
     }
 

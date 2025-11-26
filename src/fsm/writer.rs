@@ -37,6 +37,7 @@ impl WriterFSM {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum WriterNextAction<'a> {
     Write(&'a [u8]),
     Nothing,

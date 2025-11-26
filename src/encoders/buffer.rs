@@ -1,5 +1,6 @@
 use anyhow::{Context as _, Result};
 
+#[derive(Debug)]
 pub(crate) struct EncodingBuffer {
     buf: Vec<u8>,
 }

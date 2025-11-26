@@ -15,7 +15,7 @@ use crate::{
     decoders::MessageDecoder,
     encoders::MessageEncoder,
     fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM, WriterNextAction},
-    types::{Flags, GUID, Message, MessageSignature, MessageType, ObjectPath, Value},
+    types::{Flags, GUID, Header, Message, MessageType, ObjectPath, Value},
 };
 
 mod fsm;
@@ -72,7 +72,7 @@ impl Connection {
 
     fn send_message(&mut self, message: &mut Message) -> Result<u32> {
         let serial = self.serial.increment_and_get();
-        message.serial = serial;
+        message.header.serial = serial;
         let buf = MessageEncoder::encode(message)?;
 
         let mut fsm = WriterFSM::new();
@@ -98,9 +98,12 @@ impl Connection {
 
     fn send_hello(&mut self) -> Result<u32> {
         let mut message = Message {
-            message_type: MessageType::MethodCall,
-            flags: Flags { byte: 0 },
-            serial: 0,
+            header: Header {
+                message_type: MessageType::MethodCall,
+                flags: Flags { byte: 0 },
+                serial: 0,
+                body_len: 0,
+            },
             member: Some(String::from("Hello")),
             interface: Some(String::from("org.freedesktop.DBus")),
             path: Some(ObjectPath(b"/org/freedesktop/DBus".to_vec())),
@@ -108,7 +111,7 @@ impl Connection {
             reply_serial: None,
             destination: Some(String::from("org.freedesktop.DBus")),
             sender: None,
-            signature: MessageSignature(vec![]),
+            signature: None,
             unix_fds: None,
             body: vec![],
         };
@@ -163,7 +166,7 @@ fn main() {
     let mut dbus = Connection::new_session();
     dbg!(dbus.auth().unwrap());
 
-    dbus.send_hello().unwrap();
+    dbg!(dbus.send_hello().unwrap());
 
     loop {
         let msg = dbus.read_message().unwrap();

@@ -109,7 +109,7 @@ impl AuthFSM {
             Self::ReadingData { buf } => {
                 buf.add_pos(len);
                 if buf.is_full() {
-                    let buf = buf.take().unwrap();
+                    let buf = buf.take().into_vec();
                     ensure!(buf == DATA);
                     *self = Self::WritingData { written: 0 };
                 }
@@ -123,7 +123,7 @@ impl AuthFSM {
                 if buf.is_full() {
                     *self = Self::WritingBegin {
                         written: 0,
-                        buf: buf.take().unwrap(),
+                        buf: buf.take().into_vec(),
                     };
                 }
                 Ok(())

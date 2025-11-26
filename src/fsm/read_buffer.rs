@@ -32,7 +32,7 @@ impl ReadBuffer {
         self.pos == self.buf.len()
     }
 
-    pub(crate) fn unwrap(self) -> Vec<u8> {
+    pub(crate) fn into_vec(self) -> Vec<u8> {
         assert!(self.is_full());
         self.buf
     }

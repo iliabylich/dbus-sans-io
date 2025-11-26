@@ -1,5 +1,5 @@
-mod header_field;
-pub use header_field::HeaderField;
+mod header_field_name;
+pub use header_field_name::HeaderFieldName;
 
 mod message;
 pub use message::Message;
@@ -14,13 +14,10 @@ mod object_path;
 pub use object_path::ObjectPath;
 
 mod signature;
-pub use signature::Signature;
+pub use signature::{CompleteType, Signature};
 
 mod value;
 pub use value::Value;
-
-mod message_signature;
-pub use message_signature::MessageSignature;
 
 mod guid;
 pub use guid::GUID;

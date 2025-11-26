@@ -1,9 +1,5 @@
+use crate::fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM};
 use anyhow::{Result, bail};
-
-use crate::{
-    fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM},
-    types::GUID,
-};
 
 pub(crate) enum FullFSM {
     Auth(AuthFSM),

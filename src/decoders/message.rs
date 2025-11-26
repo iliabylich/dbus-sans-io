@@ -1,77 +1,106 @@
 use crate::{
     Message,
-    decoders::{
-        DecodingBuffer, HeaderDecoder, HeaderFieldsDecoder, ValueDecoder,
-        signature::SignatureDecoder,
-    },
-    types::{Header, MessageSignature},
+    decoders::{DecodingBuffer, HeaderDecoder, ValueDecoder, signature::SignatureDecoder},
+    types::{CompleteType, HeaderFieldName, Value},
 };
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 
 pub(crate) struct MessageDecoder;
 
 impl MessageDecoder {
     pub(crate) fn decode(bytes: Vec<u8>) -> Result<Message> {
-        let buf = DecodingBuffer::new(&bytes[..Header::LENGTH]);
-        let header = HeaderDecoder::decode(buf)?;
+        let mut buf = DecodingBuffer::new(&bytes);
+        let header = HeaderDecoder::decode(&mut buf)?;
 
-        let message_type = header.message_type;
-        let flags = header.flags;
-        let serial = header.serial;
-        let header_fields_len = header.header_fields_len;
+        let mut header_fields = vec![];
+        let len = buf.next_u32()?;
+        let end = buf.pos() + len as usize;
+        let signature = CompleteType::Struct(vec![CompleteType::Byte, CompleteType::Variant]);
 
-        let buffer = DecodingBuffer::new(&bytes[..Header::LENGTH + header_fields_len])
-            .with_pos(Header::LENGTH);
+        while buf.pos() < end {
+            buf.align(8)?;
+            let header = ValueDecoder::decode_value_by_complete_type(&mut buf, &signature)?;
+            header_fields.push(header);
+        }
 
-        let HeaderFieldsDecoder {
-            member,
-            interface,
-            path,
-            error_name,
-            reply_serial,
-            destination,
-            sender,
-            signature,
-            unix_fds,
-        } = HeaderFieldsDecoder::new(buffer)?;
+        let mut path = None;
+        let mut interface = None;
+        let mut member = None;
+        let mut error_name = None;
+        let mut reply_serial = None;
+        let mut destination = None;
+        let mut sender = None;
+        let mut signature = None;
+        let mut unix_fds = None;
+        for header_field in header_fields {
+            let Value::Struct(pair) = header_field else {
+                bail!("got {header_field:?} instead of a header field struct");
+            };
+            ensure!(pair.len() == 2);
+            let mut pair = pair.into_iter();
+            let header_field_name = pair.next().unwrap();
+            let value = pair.next().unwrap();
 
-        let (signature, body) = match signature {
-            Some(signature) => {
-                let signature = {
-                    let mut buf = DecodingBuffer::new(&signature);
-                    let signature = SignatureDecoder::parse_message_signature(&mut buf)?;
-                    ensure!(buf.is_eof());
-                    signature
-                };
+            let Value::Byte(header_field_name) = header_field_name else {
+                bail!("got {header_field_name:?} instead of a header field name");
+            };
+            let header_field_name = HeaderFieldName::from(header_field_name);
 
-                let body = {
-                    let mut buf = DecodingBuffer::new(&bytes).with_pos(header.body_offset());
-                    let body = ValueDecoder::decode_many(&mut buf, &signature.0)?;
-                    assert!(buf.is_eof());
-                    body
-                };
-
-                (signature, body)
+            match (header_field_name, value) {
+                (HeaderFieldName::Path, Value::ObjectPath(value)) => {
+                    path = Some(value);
+                }
+                (HeaderFieldName::Interface, Value::String(value)) => {
+                    interface = Some(value);
+                }
+                (HeaderFieldName::Member, Value::String(value)) => {
+                    member = Some(value);
+                }
+                (HeaderFieldName::ErrorName, Value::String(value)) => {
+                    error_name = Some(value);
+                }
+                (HeaderFieldName::ReplySerial, Value::UInt32(value)) => {
+                    reply_serial = Some(value);
+                }
+                (HeaderFieldName::Destination, Value::String(value)) => {
+                    destination = Some(value);
+                }
+                (HeaderFieldName::Sender, Value::String(value)) => {
+                    sender = Some(value);
+                }
+                (HeaderFieldName::Signature, Value::Signature(value)) => {
+                    let mut buf = DecodingBuffer::new(&value);
+                    signature = Some(SignatureDecoder::decode_signature(&mut buf)?)
+                }
+                (HeaderFieldName::UnixFds, Value::UInt32(value)) => {
+                    unix_fds = Some(value);
+                }
+                (header_field_name, value) => {
+                    bail!(
+                        "invalid combination of header field name/value: {header_field_name:?} vs {value:?}"
+                    );
+                }
             }
-            None => (MessageSignature(vec![]), vec![]),
-        };
+        }
+
+        let mut body = vec![];
+        if let Some(signature) = signature.as_ref() {
+            buf.align(8)?;
+            body = ValueDecoder::decode_values_by_signature(&mut buf, signature)?;
+        }
 
         Ok(Message {
-            message_type,
-            flags,
-            serial,
-
-            member,
-            interface,
+            header,
+            body,
             path,
+            interface,
+            member,
             error_name,
             reply_serial,
             destination,
             sender,
             signature,
             unix_fds,
-
-            body,
         })
     }
 }

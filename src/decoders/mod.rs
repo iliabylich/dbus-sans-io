@@ -1,9 +1,6 @@
 mod header;
 pub(crate) use header::HeaderDecoder;
 
-mod header_fields;
-pub(crate) use header_fields::HeaderFieldsDecoder;
-
 mod message;
 pub(crate) use message::MessageDecoder;
 

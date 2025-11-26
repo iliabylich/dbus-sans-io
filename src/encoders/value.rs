@@ -1,6 +1,6 @@
 use crate::{
-    encoders::EncodingBuffer,
-    types::{Value, ValueRef},
+    encoders::{EncodingBuffer, SignatureEncoder},
+    types::{HeaderFieldName, Value, ValueRef},
 };
 
 pub(crate) struct ValueEncoder;
@@ -81,8 +81,14 @@ impl ValueEncoder {
         }
     }
 
-    pub(crate) fn encode_variant(_buf: &mut EncodingBuffer) {
-        todo!()
+    pub(crate) fn encode_header(buf: &mut EncodingBuffer, field: HeaderFieldName, value: &Value) {
+        buf.encode_u8(field as u8);
+        buf.encode_u8(0);
+        let start = buf.size();
+        SignatureEncoder::encode_complete_type(buf, &value.complete_type());
+        buf.set_u8(start - 1, (buf.size() - start) as u8).unwrap();
+        buf.encode_u8(0);
+        Self::encode_value(buf, ValueRef::from(value));
     }
 
     pub(crate) fn encode_value(buf: &mut EncodingBuffer, value: ValueRef<'_>) {
@@ -102,7 +108,7 @@ impl ValueEncoder {
             ValueRef::Signature(sig) => Self::encode_signature(buf, sig),
             ValueRef::Struct(fields) => Self::encode_struct(buf, fields),
             ValueRef::Array(items) => Self::encode_array(buf, items),
-            ValueRef::Variant(_) => Self::encode_variant(buf),
+            ValueRef::Variant(_inner) => todo!(),
         }
     }
 }

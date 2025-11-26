@@ -1,6 +1,6 @@
 use crate::{
-    decoders::DecodingBuffer,
-    types::{ObjectPath, Signature, Value},
+    decoders::{DecodingBuffer, SignatureDecoder},
+    types::{CompleteType, ObjectPath, Signature, Value},
 };
 use anyhow::Result;
 
@@ -64,95 +64,119 @@ impl ValueDecoder {
         Ok(ObjectPath(bytes))
     }
 
-    pub(crate) fn decode_signature(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
+    fn decode_complete_type(buf: &mut DecodingBuffer) -> Result<CompleteType> {
+        let len = Self::decode_u8(buf)? as usize;
+        let bytes = buf.next_n(len)?.to_vec();
+        buf.skip();
+        let mut buf = DecodingBuffer::new(&bytes);
+        SignatureDecoder::decode_complete_type(&mut buf)
+    }
+
+    fn decode_signature(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
         let len = Self::decode_u8(buf)? as usize;
         let s = buf.next_n(len)?.to_vec();
         buf.skip();
         Ok(s)
     }
 
-    pub(crate) fn decode_value(buf: &mut DecodingBuffer, signature: &Signature) -> Result<Value> {
-        match signature {
-            Signature::Byte => {
+    fn decode_array(buf: &mut DecodingBuffer, item_type: &CompleteType) -> Result<Vec<Value>> {
+        let items_count = Self::decode_u32(buf)?;
+        let mut items = Vec::with_capacity(items_count as usize);
+        for _ in 0..items_count {
+            let item = Self::decode_value_by_complete_type(buf, item_type)?;
+            items.push(item);
+        }
+        Ok(items)
+    }
+
+    fn decode_struct(buf: &mut DecodingBuffer, field_types: &[CompleteType]) -> Result<Vec<Value>> {
+        let mut fields = vec![];
+        for field_type in field_types {
+            let value = Self::decode_value_by_complete_type(buf, field_type)?;
+            fields.push(value);
+        }
+        Ok(fields)
+    }
+
+    pub(crate) fn decode_value_by_complete_type(
+        buf: &mut DecodingBuffer,
+        complete_type: &CompleteType,
+    ) -> Result<Value> {
+        match complete_type {
+            CompleteType::Byte => {
                 let value = Self::decode_u8(buf)?;
                 Ok(Value::Byte(value))
             }
-            Signature::Bool => {
+            CompleteType::Bool => {
                 let value = Self::decode_bool(buf)?;
                 Ok(Value::Bool(value))
             }
-            Signature::Int16 => {
+            CompleteType::Int16 => {
                 let value = Self::decode_i16(buf)?;
                 Ok(Value::Int16(value))
             }
-            Signature::UInt16 => {
+            CompleteType::UInt16 => {
                 let value = Self::decode_u16(buf)?;
                 Ok(Value::UInt16(value))
             }
-            Signature::Int32 => {
+            CompleteType::Int32 => {
                 let value = Self::decode_i32(buf)?;
                 Ok(Value::Int32(value))
             }
-            Signature::UInt32 => {
+            CompleteType::UInt32 => {
                 let value = Self::decode_u32(buf)?;
                 Ok(Value::UInt32(value))
             }
-            Signature::Int64 => {
+            CompleteType::Int64 => {
                 let value = Self::decode_i64(buf)?;
                 Ok(Value::Int64(value))
             }
-            Signature::UInt64 => {
+            CompleteType::UInt64 => {
                 let value = Self::decode_u64(buf)?;
                 Ok(Value::UInt64(value))
             }
-            Signature::Double => {
+            CompleteType::Double => {
                 let value = Self::decode_f64(buf)?;
                 Ok(Value::Double(value))
             }
-            Signature::UnixFD => {
+            CompleteType::UnixFD => {
                 let value = Self::decode_u32(buf)?;
                 Ok(Value::UnixFD(value))
             }
-            Signature::String => {
+            CompleteType::String => {
                 let value = Self::decode_string(buf)?;
                 Ok(Value::String(value))
             }
-            Signature::ObjectPath => {
+            CompleteType::ObjectPath => {
                 let value = Self::decode_object_path(buf)?;
                 Ok(Value::ObjectPath(value))
             }
-            Signature::Signature => {
+            CompleteType::Signature => {
                 let value = Self::decode_signature(buf)?;
                 Ok(Value::Signature(value))
             }
-            Signature::Struct(signatures) => {
-                let mut fields = vec![];
-                for signature in signatures {
-                    let value = Self::decode_value(buf, signature)?;
-                    fields.push(value);
-                }
+            CompleteType::Struct(signatures) => {
+                let fields = Self::decode_struct(buf, signatures)?;
                 Ok(Value::Struct(fields))
             }
-            Signature::Array(item_signature) => {
-                let items_count = Self::decode_u32(buf)?;
-                let mut items = Vec::with_capacity(items_count as usize);
-                for _ in 0..items_count {
-                    let item = Self::decode_value(buf, item_signature)?;
-                    items.push(item);
-                }
+            CompleteType::Array(item_signature) => {
+                let items = Self::decode_array(buf, item_signature)?;
                 Ok(Value::Array(items))
             }
-            Signature::Variant => todo!(),
+            CompleteType::Variant => {
+                let complete_type = Self::decode_complete_type(buf)?;
+                Self::decode_value_by_complete_type(buf, &complete_type)
+            }
         }
     }
 
-    pub(crate) fn decode_many(
+    pub(crate) fn decode_values_by_signature(
         buf: &mut DecodingBuffer,
-        signatures: &[Signature],
+        signature: &Signature,
     ) -> Result<Vec<Value>> {
         let mut out = vec![];
-        for signature in signatures {
-            let value = Self::decode_value(buf, signature)?;
+        for complete_type in &signature.items {
+            let value = Self::decode_value_by_complete_type(buf, complete_type)?;
             out.push(value);
         }
         Ok(out)
@@ -161,25 +185,29 @@ impl ValueDecoder {
 
 #[test]
 fn test_read_byte() {
-    let mut buf = DecodingBuffer::new(b"\xFF").with_pos(0);
+    let mut buf = DecodingBuffer::new(b"\xFF");
+    buf.set_pos(0);
     assert_eq!(ValueDecoder::decode_u8(&mut buf).unwrap(), 255);
     assert!(buf.is_eof());
 }
 
 #[test]
 fn test_read_bool() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x01\x00\x00\x00").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x01\x00\x00\x00");
+    buf.set_pos(1);
     assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), true);
     assert!(buf.is_eof());
 
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x00\x00\x00\x00").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x00\x00\x00\x00");
+    buf.set_pos(1);
     assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), false);
     assert!(buf.is_eof());
 }
 
 #[test]
 fn test_read_int16() {
-    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_i16(&mut buf).unwrap(),
         0xBB << 8 | 0xAA
@@ -189,7 +217,8 @@ fn test_read_int16() {
 
 #[test]
 fn test_read_uint16() {
-    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_u16(&mut buf).unwrap(),
         0xBB << 8 | 0xAA
@@ -199,7 +228,8 @@ fn test_read_uint16() {
 
 #[test]
 fn test_read_int32() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_i32(&mut buf).unwrap(),
         0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
@@ -209,7 +239,8 @@ fn test_read_int32() {
 
 #[test]
 fn test_read_uint32() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_u32(&mut buf).unwrap(),
         0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
@@ -219,8 +250,8 @@ fn test_read_uint32() {
 
 #[test]
 fn test_read_int64() {
-    let mut buf =
-        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_i64(&mut buf).unwrap(),
         0x08 << 56
@@ -237,8 +268,8 @@ fn test_read_int64() {
 
 #[test]
 fn test_read_uint64() {
-    let mut buf =
-        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_u64(&mut buf).unwrap(),
         0x08 << 56
@@ -255,15 +286,16 @@ fn test_read_uint64() {
 
 #[test]
 fn test_read_f64() {
-    let mut buf =
-        DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F");
+    buf.set_pos(1);
     assert_eq!(ValueDecoder::decode_f64(&mut buf).unwrap(), 0.123);
     assert!(buf.is_eof())
 }
 
 #[test]
 fn test_read_object_path() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
+    buf.set_pos(1);
     assert_eq!(
         ValueDecoder::decode_object_path(&mut buf).unwrap().0,
         b"abcd"
@@ -273,14 +305,16 @@ fn test_read_object_path() {
 
 #[test]
 fn test_read_string() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
+    buf.set_pos(1);
     assert_eq!(ValueDecoder::decode_string(&mut buf).unwrap(), "abcd");
     assert!(buf.is_eof())
 }
 
 #[test]
 fn test_read_signature() {
-    let mut buf = DecodingBuffer::new(b"\0\x04abcd\0").with_pos(1);
+    let mut buf = DecodingBuffer::new(b"\0\x04abcd\0");
+    buf.set_pos(1);
     assert_eq!(ValueDecoder::decode_signature(&mut buf).unwrap(), b"abcd");
     assert!(buf.is_eof())
 }

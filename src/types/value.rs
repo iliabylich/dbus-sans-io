@@ -1,5 +1,4 @@
-use crate::types::{ObjectPath, Signature};
-use anyhow::{Result, bail};
+use crate::types::{ObjectPath, signature::CompleteType};
 
 #[derive(Debug)]
 pub enum Value {
@@ -23,8 +22,8 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn signature(&self) -> Result<Signature> {
-        ValueRef::from(self).signature()
+    pub fn complete_type(&self) -> CompleteType {
+        ValueRef::from(self).complete_type()
     }
 }
 
@@ -73,44 +72,41 @@ impl<'a> From<&'a Value> for ValueRef<'a> {
 }
 
 impl ValueRef<'_> {
-    pub(crate) fn signature(self) -> Result<Signature> {
-        let sig = match self {
-            Self::Byte(_) => Signature::Byte,
-            Self::Bool(_) => Signature::Bool,
-            Self::Int16(_) => Signature::Int16,
-            Self::UInt16(_) => Signature::UInt16,
-            Self::Int32(_) => Signature::Int32,
-            Self::UInt32(_) => Signature::UInt32,
-            Self::Int64(_) => Signature::Int64,
-            Self::UInt64(_) => Signature::UInt64,
-            Self::Double(_) => Signature::Double,
-            Self::UnixFD(_) => Signature::UnixFD,
-            Self::String(_) => Signature::String,
-            Self::ObjectPath(_) => Signature::ObjectPath,
-            Self::Signature(_) => Signature::Signature,
+    pub(crate) fn complete_type(self) -> CompleteType {
+        match self {
+            Self::Byte(_) => CompleteType::Byte,
+            Self::Bool(_) => CompleteType::Bool,
+            Self::Int16(_) => CompleteType::Int16,
+            Self::UInt16(_) => CompleteType::UInt16,
+            Self::Int32(_) => CompleteType::Int32,
+            Self::UInt32(_) => CompleteType::UInt32,
+            Self::Int64(_) => CompleteType::Int64,
+            Self::UInt64(_) => CompleteType::UInt64,
+            Self::Double(_) => CompleteType::Double,
+            Self::UnixFD(_) => CompleteType::UnixFD,
+            Self::String(_) => CompleteType::String,
+            Self::ObjectPath(_) => CompleteType::ObjectPath,
+            Self::Signature(_) => CompleteType::Signature,
             Self::Struct(values) => {
-                let mut signatures = vec![];
+                let mut types = vec![];
                 for value in values {
-                    signatures.push(ValueRef::from(value).signature()?);
+                    types.push(ValueRef::from(value).complete_type());
                 }
-                Signature::Struct(signatures)
+                CompleteType::Struct(types)
             }
             Self::Array(items) => {
-                let mut item_signature = Signature::Byte;
-                if let Some(item) = items.first() {
-                    item_signature = ValueRef::from(item).signature()?;
-                }
+                let Some(item) = items.first() else {
+                    panic!("can't represent empty array")
+                };
+                let item_type = ValueRef::from(item).complete_type();
                 for item in items {
-                    if ValueRef::from(item).signature()? != item_signature {
-                        bail!("heterogenous array")
+                    if ValueRef::from(item).complete_type() != item_type {
+                        panic!("heterogenous array")
                     }
                 }
-                Signature::Array(Box::new(item_signature))
+                CompleteType::Array(Box::new(item_type))
             }
-            Self::Variant(_value) => {
-                todo!()
-            }
-        };
-        Ok(sig)
+            Self::Variant(_value) => CompleteType::Variant,
+        }
     }
 }

@@ -14,17 +14,21 @@ impl<'a> DecodingBuffer<'a> {
         self.pos = pos;
     }
 
-    pub(crate) fn with_pos(mut self, pos: usize) -> Self {
-        self.set_pos(pos);
-        self
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.buf.len() - self.pos
+    pub(crate) fn pos(&self) -> usize {
+        self.pos
     }
 
     pub(crate) fn peek(&self) -> Option<u8> {
         self.buf.get(self.pos).copied()
+    }
+
+    pub(crate) fn peek_u32(&self) -> Option<u32> {
+        Some(u32::from_le_bytes([
+            self.buf.get(self.pos).copied()?,
+            self.buf.get(self.pos + 1).copied()?,
+            self.buf.get(self.pos + 2).copied()?,
+            self.buf.get(self.pos + 3).copied()?,
+        ]))
     }
 
     pub(crate) fn next_u8(&mut self) -> Result<u8> {

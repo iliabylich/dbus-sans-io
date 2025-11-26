@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Signature {
+pub enum CompleteType {
     Byte,
     Bool,
     Int16,
@@ -14,7 +14,12 @@ pub enum Signature {
     String,
     ObjectPath,
     Signature,
-    Struct(Vec<Signature>),
-    Array(Box<Signature>),
+    Struct(Vec<CompleteType>),
+    Array(Box<CompleteType>),
     Variant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Signature {
+    pub items: Vec<CompleteType>,
 }
