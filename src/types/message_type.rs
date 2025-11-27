@@ -23,12 +23,6 @@ impl From<u8> for MessageType {
 
 impl From<MessageType> for u8 {
     fn from(message_type: MessageType) -> Self {
-        match message_type {
-            MessageType::Invalid => 0,
-            MessageType::MethodCall => 1,
-            MessageType::MethodReturn => 2,
-            MessageType::Error => 3,
-            MessageType::Signal => 4,
-        }
+        message_type as u8
     }
 }

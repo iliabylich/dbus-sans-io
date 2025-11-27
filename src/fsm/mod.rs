@@ -10,11 +10,11 @@ pub(crate) use read_buffer::ReadBuffer;
 mod writer;
 pub(crate) use writer::WriterFSM;
 
-mod full;
-pub(crate) use full::{FullFSM, Output};
-
 mod fsm_wants;
 pub(crate) use fsm_wants::FSMWants;
 
 mod fsm_satisfy;
 pub(crate) use fsm_satisfy::FSMSatisfy;
+
+mod reader_writer;
+pub(crate) use reader_writer::ReaderWriterFSM;

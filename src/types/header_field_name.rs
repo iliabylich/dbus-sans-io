@@ -32,17 +32,6 @@ impl From<u8> for HeaderFieldName {
 
 impl From<HeaderFieldName> for u8 {
     fn from(header_field: HeaderFieldName) -> Self {
-        match header_field {
-            HeaderFieldName::Invalid => 0,
-            HeaderFieldName::Path => 1,
-            HeaderFieldName::Interface => 2,
-            HeaderFieldName::Member => 3,
-            HeaderFieldName::ErrorName => 4,
-            HeaderFieldName::ReplySerial => 5,
-            HeaderFieldName::Destination => 6,
-            HeaderFieldName::Sender => 7,
-            HeaderFieldName::Signature => 8,
-            HeaderFieldName::UnixFds => 9,
-        }
+        header_field as u8
     }
 }
