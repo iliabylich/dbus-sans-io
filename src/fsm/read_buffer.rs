@@ -24,7 +24,7 @@ impl ReadBuffer {
         &self.buf[..self.pos]
     }
 
-    pub(crate) fn remaining_part(&mut self) -> &mut [u8] {
+    pub(crate) fn remaining_part_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.pos..]
     }
 

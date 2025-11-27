@@ -1,6 +1,8 @@
+use crate::fsm::{FSMSatisfy, FSMWants};
 use anyhow::{Context, Result};
 use std::collections::VecDeque;
 
+#[derive(Debug)]
 pub(crate) struct WriterFSM {
     queue: VecDeque<(usize, Vec<u8>)>,
 }
@@ -16,15 +18,17 @@ impl WriterFSM {
         self.queue.push_back((0, buf));
     }
 
-    pub(crate) fn next_action(&self) -> WriterNextAction<'_> {
+    pub(crate) fn wants(&self) -> FSMWants<'_> {
         let Some((pos, buf)) = self.queue.front() else {
-            return WriterNextAction::Nothing;
+            return FSMWants::Nothing;
         };
 
-        WriterNextAction::Write(&buf[*pos..])
+        FSMWants::Write(&buf[*pos..])
     }
 
-    pub(crate) fn done_writing(&mut self, len: usize) -> Result<()> {
+    pub(crate) fn satisfy(&mut self, with: FSMSatisfy) -> Result<()> {
+        let len = with.require_write()?;
+
         let (pos, buf) = self.queue.front_mut().context("malformed state")?;
         *pos += len;
         assert!(*pos <= buf.len());
@@ -35,10 +39,4 @@ impl WriterFSM {
 
         Ok(())
     }
-}
-
-#[derive(Debug)]
-pub(crate) enum WriterNextAction<'a> {
-    Write(&'a [u8]),
-    Nothing,
 }

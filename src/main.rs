@@ -1,28 +1,33 @@
 use anyhow::{Result, bail, ensure};
-use std::{
-    io::{ErrorKind, Read as _, Write},
-    os::unix::net::UnixStream,
-};
-
-mod serial;
-pub(crate) use serial::Serial;
+use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
+use std::os::{fd::AsRawFd, unix::net::UnixStream};
 
 mod decoders;
 mod encoders;
+mod non_blocking_unix_stream;
+mod serial;
 mod types;
 
 use crate::{
-    decoders::MessageDecoder,
     encoders::MessageEncoder,
-    fsm::{AuthFSM, AuthNextAction, ReaderFSM, ReaderNextAction, WriterFSM, WriterNextAction},
+    fsm::{AuthFSM, FSMSatisfy, FSMWants, FullFSM, Output, ReaderFSM, WriterFSM},
+    non_blocking_unix_stream::NonBlockingUnixStream,
+    serial::Serial,
     types::{Flags, GUID, Header, Message, MessageType, ObjectPath, Value},
 };
 
 mod fsm;
 
 struct Connection {
-    stream: UnixStream,
+    stream: NonBlockingUnixStream,
     serial: Serial,
+    fsm: FullFSM,
+}
+
+impl AsRawFd for Connection {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.stream.as_raw_fd()
+    }
 }
 
 impl Connection {
@@ -30,47 +35,148 @@ impl Connection {
         let address =
             std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("no DBUS_SESSION_BUS_ADDRESS");
         let (_, path) = address.split_once("=").expect("no = separator");
-        println!("{path:?}");
         let stream = UnixStream::connect(path).expect("failed to create unix socket");
         stream.set_nonblocking(true).unwrap();
 
         Self {
-            stream,
+            stream: NonBlockingUnixStream::new(stream),
             serial: Serial::zero(),
+            fsm: FullFSM::new(),
         }
     }
 
-    fn auth(&mut self) -> Result<GUID> {
+    fn poll_enqueue(&mut self, mut message: Message) -> Result<Message> {
+        let serial = self.serial.increment_and_get();
+        message.header.serial = serial;
+        let buf = MessageEncoder::encode(&message)?;
+
+        self.fsm.enqueue(buf)?;
+        Ok(message)
+    }
+
+    fn poll_auth_events(&mut self) -> i16 {
+        match self.fsm.wants() {
+            FSMWants::Read(_) => POLLIN,
+            FSMWants::Write(_) => POLLOUT,
+            FSMWants::Nothing => unreachable!(),
+        }
+    }
+
+    fn poll_auth(&mut self, readable: bool, writable: bool) -> Result<Option<GUID>> {
+        loop {
+            let mut did = false;
+
+            if writable && let FSMWants::Write(buf) = self.fsm.wants() {
+                match self.stream.write(buf)? {
+                    Some(len) => {
+                        did = true;
+                        match self.fsm.satisfy(FSMSatisfy::Write { len })? {
+                            Output::GUID(guid) => return Ok(Some(guid)),
+                            Output::Message(_) => unreachable!(),
+                            Output::NothingYet => {}
+                        }
+                    }
+                    None => {}
+                }
+            }
+
+            if readable && let FSMWants::Read(buf) = self.fsm.wants() {
+                match self.stream.read(buf)? {
+                    Some(len) => {
+                        did = true;
+                        match self.fsm.satisfy(FSMSatisfy::Read { len })? {
+                            Output::GUID(_) => unreachable!(),
+                            Output::Message(_) => unreachable!(),
+                            Output::NothingYet => {}
+                        }
+                    }
+                    None => {}
+                }
+            }
+
+            if !did {
+                break;
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn poll_read_write_events(&mut self) -> i16 {
+        match self.fsm.wants() {
+            FSMWants::Read(_) => POLLIN,
+            FSMWants::Write(_) => POLLOUT,
+            FSMWants::Nothing => unreachable!(),
+        }
+    }
+
+    fn poll_read_write(&mut self, readable: bool, writable: bool) -> Result<Option<Message>> {
+        loop {
+            let mut did = false;
+
+            if writable && let FSMWants::Write(buf) = self.fsm.wants() {
+                match self.stream.write(buf)? {
+                    Some(len) => {
+                        did = true;
+                        match self.fsm.satisfy(FSMSatisfy::Write { len })? {
+                            Output::GUID(_) => unreachable!(),
+                            Output::Message(_) => unreachable!(),
+                            Output::NothingYet => {}
+                        }
+                    }
+                    None => {}
+                }
+            }
+
+            if readable && let FSMWants::Read(buf) = self.fsm.wants() {
+                match self.stream.read(buf)? {
+                    Some(len) => {
+                        did = true;
+                        match self.fsm.satisfy(FSMSatisfy::Read { len })? {
+                            Output::GUID(_) => unreachable!(),
+                            Output::Message(message) => return Ok(Some(message)),
+                            Output::NothingYet => {}
+                        }
+                    }
+                    None => {}
+                }
+            }
+
+            if !did {
+                break;
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn blocking_auth(&mut self) -> Result<GUID> {
         let mut fsm = AuthFSM::new();
 
         loop {
-            match fsm.next_action() {
-                AuthNextAction::Read(buf) => match self.stream.read(buf) {
-                    Ok(len) => {
-                        fsm.done_reading(len)?;
+            match fsm.wants() {
+                FSMWants::Read(buf) => match self.stream.read(buf)? {
+                    Some(len) => {
+                        fsm.satisfy(FSMSatisfy::Read { len })?;
                     }
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                        continue;
-                    }
-                    Err(err) => return Err(err.into()),
+                    None => {}
                 },
 
-                AuthNextAction::Write(bytes) => match self.stream.write(bytes) {
-                    Ok(len) => {
-                        fsm.done_writing(len)?;
+                FSMWants::Write(bytes) => match self.stream.write(bytes)? {
+                    Some(len) => {
+                        if let Some(guid) = fsm.satisfy(FSMSatisfy::Write { len })? {
+                            return Ok(guid);
+                        }
                     }
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                        continue;
-                    }
-                    Err(err) => return Err(err.into()),
+                    None => {}
                 },
 
-                AuthNextAction::Done(buf) => return Ok(GUID::try_from(buf)?),
+                FSMWants::Nothing => {}
             }
         }
     }
 
-    fn send_message(&mut self, message: &mut Message) -> Result<u32> {
+    fn blocking_send_message(&mut self, message: &mut Message) -> Result<u32> {
         let serial = self.serial.increment_and_get();
         message.header.serial = serial;
         let buf = MessageEncoder::encode(message)?;
@@ -79,25 +185,23 @@ impl Connection {
         fsm.enqueue(buf);
 
         loop {
-            match fsm.next_action() {
-                WriterNextAction::Nothing => break,
-                WriterNextAction::Write(buf) => match self.stream.write(buf) {
-                    Ok(len) => {
-                        fsm.done_writing(len)?;
+            match fsm.wants() {
+                FSMWants::Nothing => break,
+                FSMWants::Write(buf) => match self.stream.write(buf)? {
+                    Some(len) => {
+                        fsm.satisfy(FSMSatisfy::Write { len })?;
                     }
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
-                        continue;
-                    }
-                    Err(err) => return Err(err.into()),
+                    None => continue,
                 },
+                FSMWants::Read(_) => unreachable!(),
             }
         }
 
         Ok(serial)
     }
 
-    fn send_hello(&mut self) -> Result<u32> {
-        let mut message = Message {
+    fn hello() -> Message {
+        Message {
             header: Header {
                 message_type: MessageType::MethodCall,
                 flags: Flags { byte: 0 },
@@ -114,31 +218,34 @@ impl Connection {
             signature: None,
             unix_fds: None,
             body: vec![],
-        };
+        }
+    }
 
-        self.send_message(&mut message)
+    fn send_hello(&mut self) -> Result<u32> {
+        let mut message = Self::hello();
+
+        self.blocking_send_message(&mut message)
     }
 
     fn read_message(&mut self) -> Result<Message> {
         let mut fsm = ReaderFSM::new();
 
         loop {
-            match fsm.next_action() {
-                ReaderNextAction::Read(buf) => match self.stream.read(buf) {
-                    Ok(len) => {
-                        fsm.done_reading(len)?;
+            match fsm.wants() {
+                FSMWants::Read(buf) => match self.stream.read(buf)? {
+                    Some(len) => {
+                        if let Some(message) = fsm.satisfy(FSMSatisfy::Read { len })? {
+                            return Ok(message);
+                        }
                     }
 
-                    Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                    None => {
                         continue;
                     }
-                    Err(err) => return Err(err.into()),
                 },
 
-                ReaderNextAction::Message(buf) => {
-                    let message = MessageDecoder::decode(buf)?;
-                    return Ok(message);
-                }
+                FSMWants::Write(_) => unreachable!(),
+                FSMWants::Nothing => unreachable!(),
             }
         }
     }
@@ -162,15 +269,58 @@ impl FromMessage for NameAcquired {
     }
 }
 
-fn main() {
-    let mut dbus = Connection::new_session();
-    dbg!(dbus.auth().unwrap());
-
+#[allow(dead_code)]
+fn main_blocking(mut dbus: Connection) {
+    let _serial = dbus.blocking_auth().unwrap();
     dbg!(dbus.send_hello().unwrap());
-
     loop {
         let msg = dbus.read_message().unwrap();
 
         println!("Received {:?}", msg);
     }
+}
+
+#[allow(dead_code)]
+fn main_poll(mut dbus: Connection) {
+    let mut fds = [pollfd {
+        fd: dbus.as_raw_fd(),
+        events: POLLIN | POLLOUT,
+        revents: 0,
+    }];
+
+    fn do_poll(fds: &mut [pollfd; 1]) -> (bool, bool) {
+        println!("Polling...");
+        let res = unsafe { poll(fds.as_mut_ptr(), 1, -1) };
+        assert!(res == 1);
+        let readable = fds[0].revents & POLLIN != 0;
+        let writable = fds[0].revents & POLLOUT != 0;
+        assert_eq!(fds[0].revents & POLLERR, 0);
+        println!("{readable} {writable}");
+        (readable, writable)
+    }
+
+    loop {
+        fds[0].events = dbus.poll_auth_events();
+        let (readable, writable) = do_poll(&mut fds);
+
+        if let Some(guid) = dbus.poll_auth(readable, writable).unwrap() {
+            println!("GUID: {}", guid.as_str().unwrap());
+            break;
+        }
+    }
+    let _sent = dbus.poll_enqueue(Connection::hello()).unwrap();
+    loop {
+        fds[0].events = dbus.poll_read_write_events();
+        let (readable, writable) = do_poll(&mut fds);
+
+        if let Some(message) = dbus.poll_read_write(readable, writable).unwrap() {
+            println!("Received: {:?}", message);
+        }
+    }
+}
+
+fn main() {
+    let dbus = Connection::new_session();
+    // main_blocking(dbus);
+    main_poll(dbus);
 }

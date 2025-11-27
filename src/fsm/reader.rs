@@ -1,20 +1,14 @@
 use crate::{
-    decoders::{DecodingBuffer, HeaderDecoder},
-    fsm::ReadBuffer,
+    decoders::{DecodingBuffer, HeaderDecoder, MessageDecoder},
+    fsm::{FSMSatisfy, FSMWants, ReadBuffer},
+    types::Message,
 };
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 
 #[derive(Debug)]
 pub enum ReaderFSM {
     ReadingHeader { buf: ReadBuffer },
     ReadingRest { buf: ReadBuffer },
-    Done { buf: Vec<u8> },
-}
-
-#[derive(Debug)]
-pub enum ReaderNextAction<'a> {
-    Read(&'a mut [u8]),
-    Message(Vec<u8>),
 }
 
 impl ReaderFSM {
@@ -24,19 +18,16 @@ impl ReaderFSM {
         }
     }
 
-    pub fn next_action(&mut self) -> ReaderNextAction<'_> {
+    pub fn wants(&mut self) -> FSMWants<'_> {
         match self {
-            Self::ReadingHeader { buf } => ReaderNextAction::Read(buf.remaining_part()),
-            Self::ReadingRest { buf, .. } => ReaderNextAction::Read(buf.remaining_part()),
-            Self::Done { buf } => {
-                let buf = std::mem::take(buf);
-                *self = Self::new();
-                ReaderNextAction::Message(buf)
-            }
+            Self::ReadingHeader { buf } => FSMWants::Read(buf.remaining_part_mut()),
+            Self::ReadingRest { buf, .. } => FSMWants::Read(buf.remaining_part_mut()),
         }
     }
 
-    pub fn done_reading(&mut self, len: usize) -> Result<()> {
+    pub fn satisfy(&mut self, with: FSMSatisfy) -> Result<Option<Message>> {
+        let len = with.require_read()?;
+
         match self {
             Self::ReadingHeader { buf } => {
                 buf.add_pos(len);
@@ -56,20 +47,19 @@ impl ReaderFSM {
                     *self = Self::ReadingRest { buf: buf.take() }
                 }
 
-                Ok(())
+                Ok(None)
             }
+
             Self::ReadingRest { buf } => {
                 buf.add_pos(len);
                 if buf.is_full() {
-                    *self = Self::Done {
-                        buf: buf.take().into_vec(),
-                    }
+                    let buf = buf.take().into_vec();
+                    let message = MessageDecoder::decode(buf)?;
+                    *self = Self::new();
+                    Ok(Some(message))
+                } else {
+                    Ok(None)
                 }
-
-                Ok(())
-            }
-            Self::Done { .. } => {
-                bail!("malformed state, you were supposed to take message, not READ (in {self:?})")
             }
         }
     }
