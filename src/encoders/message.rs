@@ -23,6 +23,14 @@ impl MessageEncoder {
                     &Value::ObjectPath(path.clone()),
                 );
             }
+            if let Some(interface) = message.interface.as_ref() {
+                buf.align(8);
+                ValueEncoder::encode_header(
+                    &mut buf,
+                    HeaderFieldName::Interface,
+                    &Value::String(interface.clone()),
+                );
+            }
             if let Some(member) = message.member.as_ref() {
                 buf.align(8);
                 ValueEncoder::encode_header(
@@ -31,12 +39,20 @@ impl MessageEncoder {
                     &Value::String(member.clone()),
                 );
             }
-            if let Some(interface) = message.interface.as_ref() {
+            if let Some(error_name) = message.error_name.as_ref() {
                 buf.align(8);
                 ValueEncoder::encode_header(
                     &mut buf,
-                    HeaderFieldName::Interface,
-                    &Value::String(interface.clone()),
+                    HeaderFieldName::ErrorName,
+                    &Value::String(error_name.clone()),
+                );
+            }
+            if let Some(reply_serial) = message.reply_serial.as_ref() {
+                buf.align(8);
+                ValueEncoder::encode_header(
+                    &mut buf,
+                    HeaderFieldName::ReplySerial,
+                    &Value::UInt32(*reply_serial),
                 );
             }
             if let Some(destination) = message.destination.as_ref() {
@@ -53,6 +69,22 @@ impl MessageEncoder {
                     &mut buf,
                     HeaderFieldName::Sender,
                     &Value::String(sender.clone()),
+                );
+            }
+            // if let Some(signature) = message.signature.as_ref() {
+            //     buf.align(8);
+            //     ValueEncoder::encode_header(
+            //         &mut buf,
+            //         HeaderFieldName::Signature,
+            //         &Value::Signature(signature.clone()),
+            //     );
+            // }
+            if let Some(unix_fds) = message.unix_fds.as_ref() {
+                buf.align(8);
+                ValueEncoder::encode_header(
+                    &mut buf,
+                    HeaderFieldName::UnixFds,
+                    &Value::UInt32(*unix_fds),
                 );
             }
         };
