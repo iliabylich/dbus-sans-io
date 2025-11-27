@@ -1,6 +1,6 @@
 use crate::{
     decoders::{DecodingBuffer, HeaderDecoder, MessageDecoder},
-    fsm::{FSMSatisfy, FSMWants, ReadBuffer},
+    fsm::ReadBuffer,
     types::Message,
 };
 use anyhow::{Context as _, Result};
@@ -29,13 +29,8 @@ impl ReaderFSM {
         self.buf.remaining_part_mut()
     }
 
-    pub fn wants(&mut self) -> FSMWants<'_> {
-        FSMWants::Read(self.buf.remaining_part_mut())
-    }
-
-    pub fn satisfy(&mut self, with: FSMSatisfy) -> Result<Option<Message>> {
-        let len = with.require_read()?;
-        self.buf.add_pos(len);
+    pub fn satisfy(&mut self, read: usize) -> Result<Option<Message>> {
+        self.buf.add_pos(read);
         if !self.buf.is_full() {
             return Ok(None);
         }

@@ -1,8 +1,4 @@
-use crate::{
-    encoders::MessageEncoder,
-    fsm::{FSMSatisfy, FSMWants},
-    types::Message,
-};
+use crate::{encoders::MessageEncoder, types::Message};
 use anyhow::{Context, Result};
 use std::collections::VecDeque;
 
@@ -35,18 +31,9 @@ impl WriterFSM {
         Some(&buf[*pos..])
     }
 
-    pub(crate) fn wants(&self) -> FSMWants<'_> {
-        match self.queue.front() {
-            Some(QueueItem { pos, buf }) => FSMWants::Write(&buf[*pos..]),
-            None => FSMWants::Nothing,
-        }
-    }
-
-    pub(crate) fn satisfy(&mut self, with: FSMSatisfy) -> Result<()> {
-        let len = with.require_write()?;
-
+    pub(crate) fn satisfy(&mut self, written: usize) -> Result<()> {
         let QueueItem { pos, buf } = self.queue.front_mut().context("malformed state")?;
-        *pos += len;
+        *pos += written;
         assert!(*pos <= buf.len());
 
         if *pos == buf.len() {
