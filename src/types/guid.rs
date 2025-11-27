@@ -1,12 +1,12 @@
 use anyhow::ensure;
 
 #[derive(Clone, PartialEq, Eq, Default)]
-pub struct GUID(pub Vec<u8>);
+pub(crate) struct GUID(pub(crate) Vec<u8>);
 
 impl GUID {
-    pub const LENGTH: usize = 37;
+    pub(crate) const LENGTH: usize = 37;
 
-    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
+    pub(crate) fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.0[3..Self::LENGTH - 2])
     }
 }

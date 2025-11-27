@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 
 #[derive(Default, Clone, Copy)]
-pub struct Flags {
-    pub byte: u8,
+pub(crate) struct Flags {
+    pub(crate) byte: u8,
 }
 
 impl TryFrom<u8> for Flags {
@@ -23,9 +23,9 @@ impl From<Flags> for u8 {
 }
 
 impl Flags {
-    pub const NO_REPLY_EXPECTED: u8 = 0x1;
-    pub const NO_AUTO_START: u8 = 0x2;
-    pub const ALLOW_INTERACTIVE_AUTHORIZATION: u8 = 0x4;
+    pub(crate) const NO_REPLY_EXPECTED: u8 = 0x1;
+    pub(crate) const NO_AUTO_START: u8 = 0x2;
+    pub(crate) const ALLOW_INTERACTIVE_AUTHORIZATION: u8 = 0x4;
 }
 
 impl std::fmt::Debug for Flags {

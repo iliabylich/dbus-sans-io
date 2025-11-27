@@ -1,7 +1,7 @@
 use crate::types::{ObjectPath, signature::CompleteType};
 
 #[derive(Debug)]
-pub enum Value {
+pub(crate) enum Value {
     Byte(u8),
     Bool(bool),
     Int16(i16),
@@ -22,7 +22,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn complete_type(&self) -> CompleteType {
+    pub(crate) fn complete_type(&self) -> CompleteType {
         ValueRef::from(self).complete_type()
     }
 }
@@ -62,7 +62,7 @@ impl<'a> From<&'a Value> for ValueRef<'a> {
             Value::Double(v) => Self::Double(*v),
             Value::UnixFD(v) => Self::UnixFD(*v),
             Value::String(v) => Self::String(v),
-            Value::ObjectPath(v) => Self::ObjectPath(&v.0),
+            Value::ObjectPath(v) => Self::ObjectPath(v.as_bytes()),
             Value::Signature(v) => Self::Signature(v),
             Value::Struct(v) => Self::Struct(v),
             Value::Array(v) => Self::Array(v),

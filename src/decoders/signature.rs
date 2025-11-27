@@ -47,7 +47,7 @@ impl SignatureDecoder {
         }
     }
 
-    pub fn decode_signature(buf: &mut DecodingBuffer) -> Result<Signature> {
+    pub(crate) fn decode_signature(buf: &mut DecodingBuffer) -> Result<Signature> {
         let mut sig = Signature { items: vec![] };
         while !buf.is_eof() {
             let complete_type = Self::decode_complete_type(buf)?;

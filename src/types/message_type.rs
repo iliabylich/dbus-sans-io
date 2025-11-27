@@ -1,6 +1,6 @@
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MessageType {
+pub(crate) enum MessageType {
     #[default]
     Invalid = 0,
     MethodCall = 1,

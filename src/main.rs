@@ -1,4 +1,4 @@
-use anyhow::{Result, bail, ensure};
+use anyhow::Result;
 use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
 use std::{
     io::{Read as _, Write as _},
@@ -16,14 +16,13 @@ use crate::{
     fsm::{AuthFSM, AuthWants, ReaderFSM, WriterFSM},
     non_blocking_unix_stream::NonBlockingUnixStream,
     serial::Serial,
-    types::{Flags, GUID, Header, Message, MessageType, ObjectPath, Value},
+    types::{Flags, GUID, Header, Message, MessageType, ObjectPath},
 };
 
 fn conn() -> UnixStream {
     let address = std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("no DBUS_SESSION_BUS_ADDRESS");
     let (_, path) = address.split_once("=").expect("no = separator");
-    let stream = UnixStream::connect(path).expect("failed to create unix socket");
-    stream
+    UnixStream::connect(path).expect("failed to create unix socket")
 }
 
 struct NonBlockingConnection {
@@ -150,7 +149,7 @@ impl BlockingConnection {
         let stream = conn();
 
         Self {
-            stream: stream,
+            stream,
             serial: Serial::zero(),
 
             auth: AuthFSM::new(),
@@ -213,7 +212,7 @@ fn hello() -> Message {
         },
         member: Some(String::from("Hello")),
         interface: Some(String::from("org.freedesktop.DBus")),
-        path: Some(ObjectPath(b"/org/freedesktop/DBus".to_vec())),
+        path: Some(ObjectPath::new(b"/org/freedesktop/DBus".to_vec())),
         error_name: None,
         reply_serial: None,
         destination: Some(String::from("org.freedesktop.DBus")),
@@ -221,24 +220,6 @@ fn hello() -> Message {
         signature: None,
         unix_fds: None,
         body: vec![],
-    }
-}
-
-pub trait FromMessage: Sized {
-    fn from_message(message: Message) -> Result<Self>;
-}
-
-pub struct NameAcquired {
-    pub name: String,
-}
-impl FromMessage for NameAcquired {
-    fn from_message(message: Message) -> Result<Self> {
-        ensure!(message.body.len() == 1);
-        let name = message.body.into_iter().next().unwrap();
-        let Value::String(name) = name else {
-            bail!("NameAcquired: expected String, got {name:?}");
-        };
-        Ok(Self { name })
     }
 }
 

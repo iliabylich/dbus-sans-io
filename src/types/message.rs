@@ -1,18 +1,18 @@
 use crate::types::{Header, ObjectPath, Signature, Value};
 
 #[derive(Debug, Default)]
-pub struct Message {
-    pub header: Header,
+pub(crate) struct Message {
+    pub(crate) header: Header,
 
-    pub member: Option<String>,
-    pub interface: Option<String>,
-    pub path: Option<ObjectPath>,
-    pub error_name: Option<String>,
-    pub reply_serial: Option<u32>,
-    pub destination: Option<String>,
-    pub sender: Option<String>,
-    pub signature: Option<Signature>,
-    pub unix_fds: Option<u32>,
+    pub(crate) member: Option<String>,
+    pub(crate) interface: Option<String>,
+    pub(crate) path: Option<ObjectPath>,
+    pub(crate) error_name: Option<String>,
+    pub(crate) reply_serial: Option<u32>,
+    pub(crate) destination: Option<String>,
+    pub(crate) sender: Option<String>,
+    pub(crate) signature: Option<Signature>,
+    pub(crate) unix_fds: Option<u32>,
 
-    pub body: Vec<Value>,
+    pub(crate) body: Vec<Value>,
 }

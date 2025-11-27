@@ -1,13 +1,17 @@
 #[derive(Clone)]
-pub struct ObjectPath(pub Vec<u8>);
+pub(crate) struct ObjectPath(Vec<u8>);
 
 impl ObjectPath {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
 
-    pub fn as_str_lossy(&self) -> String {
+    pub(crate) fn as_str_lossy(&self) -> String {
         String::from_utf8_lossy(&self.0).into_owned()
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_slice()
     }
 }
 

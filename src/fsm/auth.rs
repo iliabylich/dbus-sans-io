@@ -2,7 +2,7 @@ use crate::{fsm::ReadBuffer, types::GUID};
 use anyhow::{Result, bail, ensure};
 
 #[derive(Debug)]
-pub enum AuthFSM {
+pub(crate) enum AuthFSM {
     WritingZero,
     WritingAuthExternal { written: usize },
     ReadingData { buf: ReadBuffer },
@@ -22,11 +22,11 @@ pub(crate) enum AuthWants<'a> {
 }
 
 impl AuthFSM {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::WritingZero
     }
 
-    pub fn wants(&mut self) -> AuthWants<'_> {
+    pub(crate) fn wants(&mut self) -> AuthWants<'_> {
         match self {
             Self::WritingZero => AuthWants::Write(b"\0"),
             Self::WritingAuthExternal { written } => {

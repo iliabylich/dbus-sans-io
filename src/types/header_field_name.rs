@@ -1,6 +1,6 @@
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Default)]
-pub enum HeaderFieldName {
+pub(crate) enum HeaderFieldName {
     #[default]
     Invalid = 0,
     Path = 1,
@@ -25,6 +25,7 @@ impl From<u8> for HeaderFieldName {
             6 => HeaderFieldName::Destination,
             7 => HeaderFieldName::Sender,
             8 => HeaderFieldName::Signature,
+            9 => HeaderFieldName::UnixFds,
             _ => HeaderFieldName::Invalid,
         }
     }

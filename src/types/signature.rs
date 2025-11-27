@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CompleteType {
+pub(crate) enum CompleteType {
     Byte,
     Bool,
     Int16,
@@ -20,6 +20,6 @@ pub enum CompleteType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Signature {
-    pub items: Vec<CompleteType>,
+pub(crate) struct Signature {
+    pub(crate) items: Vec<CompleteType>,
 }
