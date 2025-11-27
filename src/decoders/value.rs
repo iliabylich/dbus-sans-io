@@ -165,7 +165,8 @@ impl ValueDecoder {
             }
             CompleteType::Variant => {
                 let complete_type = Self::decode_complete_type(buf)?;
-                Self::decode_value_by_complete_type(buf, &complete_type)
+                let inner = Self::decode_value_by_complete_type(buf, &complete_type)?;
+                Ok(Value::Variant(Box::new(inner)))
             }
         }
     }

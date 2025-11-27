@@ -46,7 +46,11 @@ impl MessageDecoder {
             };
             let header_field_name = HeaderFieldName::from(header_field_name);
 
-            match (header_field_name, value) {
+            let Value::Variant(value) = value else {
+                bail!("got {value:?} instead of Variant in a header field");
+            };
+
+            match (header_field_name, *value) {
                 (HeaderFieldName::Path, Value::ObjectPath(value)) => {
                     path = Some(value);
                 }
