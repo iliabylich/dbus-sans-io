@@ -15,6 +15,3 @@ pub(crate) use fsm_wants::FSMWants;
 
 mod fsm_satisfy;
 pub(crate) use fsm_satisfy::FSMSatisfy;
-
-mod reader_writer;
-pub(crate) use reader_writer::ReaderWriterFSM;

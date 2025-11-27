@@ -25,6 +25,10 @@ impl ReaderFSM {
         }
     }
 
+    pub fn wants_read(&mut self) -> &mut [u8] {
+        self.buf.remaining_part_mut()
+    }
+
     pub fn wants(&mut self) -> FSMWants<'_> {
         FSMWants::Read(self.buf.remaining_part_mut())
     }

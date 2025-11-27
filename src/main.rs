@@ -9,7 +9,7 @@ mod serial;
 mod types;
 
 use crate::{
-    fsm::{AuthFSM, FSMSatisfy, FSMWants, ReaderFSM, ReaderWriterFSM, WriterFSM},
+    fsm::{AuthFSM, FSMSatisfy, FSMWants, ReaderFSM, WriterFSM},
     non_blocking_unix_stream::NonBlockingUnixStream,
     serial::Serial,
     types::{Flags, GUID, Header, Message, MessageType, ObjectPath, Value},
@@ -22,7 +22,8 @@ struct Connection {
     serial: Serial,
 
     auth: AuthFSM,
-    reader_writer: ReaderWriterFSM,
+    reader: ReaderFSM,
+    writer: WriterFSM,
 }
 
 impl AsRawFd for Connection {
@@ -44,7 +45,8 @@ impl Connection {
             serial: Serial::zero(),
 
             auth: AuthFSM::new(),
-            reader_writer: ReaderWriterFSM::new(),
+            reader: ReaderFSM::new(),
+            writer: WriterFSM::new(),
         }
     }
 
@@ -52,7 +54,7 @@ impl Connection {
         let serial = self.serial.increment_and_get();
         message.header.serial = serial;
 
-        self.reader_writer.enqueue(&message)?;
+        self.writer.enqueue(&message)?;
         Ok(message)
     }
 
@@ -97,47 +99,37 @@ impl Connection {
     }
 
     fn poll_read_write_events(&mut self) -> i16 {
-        match self.reader_writer.wants() {
-            FSMWants::Read(_) => POLLIN,
-            FSMWants::Write(_) => POLLOUT,
-            FSMWants::Nothing => unreachable!(),
+        let mut out = POLLIN;
+        if self.writer.wants_write().is_some() {
+            out |= POLLOUT;
+        }
+        out
+    }
+
+    fn poll_read_one_message(&mut self) -> Result<Option<Message>> {
+        loop {
+            let buf = self.reader.wants_read();
+            let Some(len) = self.stream.read(buf)? else {
+                return Ok(None);
+            };
+
+            if let Some(message) = self.reader.satisfy(FSMSatisfy::Read { len })? {
+                return Ok(Some(message));
+            }
         }
     }
 
-    fn poll_read_write(&mut self, readable: bool, writable: bool) -> Result<Option<Message>> {
+    fn poll_write_to_end(&mut self) -> Result<()> {
         loop {
-            let mut did = false;
-
-            if writable
-                && let FSMWants::Write(buf) = self.reader_writer.wants()
-                && let Some(len) = self.stream.write(buf)?
-            {
-                did = true;
-                if self
-                    .reader_writer
-                    .satisfy(FSMSatisfy::Write { len })?
-                    .is_some()
-                {
-                    unreachable!();
-                }
-            }
-
-            if readable
-                && let FSMWants::Read(buf) = self.reader_writer.wants()
-                && let Some(len) = self.stream.read(buf)?
-            {
-                did = true;
-                if let Some(message) = self.reader_writer.satisfy(FSMSatisfy::Read { len })? {
-                    return Ok(Some(message));
-                }
-            }
-
-            if !did {
+            let Some(buf) = self.writer.wants_write() else {
                 break;
-            }
+            };
+            let Some(len) = self.stream.write(buf)? else {
+                break;
+            };
+            self.writer.satisfy(FSMSatisfy::Write { len })?;
         }
-
-        Ok(None)
+        Ok(())
     }
 
     fn blocking_auth(&mut self) -> Result<GUID> {
@@ -290,14 +282,20 @@ fn main_poll(mut dbus: Connection) {
         fds[0].events = dbus.poll_read_write_events();
         let (readable, writable) = do_poll(&mut fds);
 
-        if let Some(message) = dbus.poll_read_write(readable, writable).unwrap() {
-            println!("Received: {:?}", message);
+        if writable {
+            dbus.poll_write_to_end().unwrap();
+        }
+
+        if readable {
+            while let Some(message) = dbus.poll_read_one_message().unwrap() {
+                println!("Received: {:?}", message);
+            }
         }
     }
 }
 
 fn main() {
     let dbus = Connection::new_session();
-    // main_blocking(dbus);
-    main_poll(dbus);
+    main_blocking(dbus);
+    // main_poll(dbus);
 }
