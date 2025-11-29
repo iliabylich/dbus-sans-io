@@ -107,7 +107,7 @@ impl ValueEncoder {
             ValueRef::ObjectPath(path) => Self::encode_object_path(buf, path),
             ValueRef::Signature(sig) => Self::encode_signature(buf, sig),
             ValueRef::Struct(fields) => Self::encode_struct(buf, fields),
-            ValueRef::Array(items) => Self::encode_array(buf, items),
+            ValueRef::Array(_item_type, items) => Self::encode_array(buf, items),
             ValueRef::Variant(_inner) => todo!(),
         }
     }

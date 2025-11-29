@@ -19,7 +19,19 @@ pub(crate) enum CompleteType {
     Variant,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct Signature {
     pub(crate) items: Vec<CompleteType>,
+}
+
+impl std::fmt::Debug for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Signature(")?;
+        let mut started = false;
+        for item in &self.items {
+            write!(f, "{}{:?}", if started { " -> " } else { "" }, item)?;
+            started = true;
+        }
+        write!(f, ")")
+    }
 }

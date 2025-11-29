@@ -1,4 +1,4 @@
-use crate::types::{ObjectPath, signature::CompleteType};
+use crate::types::signature::CompleteType;
 
 #[derive(Debug)]
 pub(crate) enum Value {
@@ -14,14 +14,22 @@ pub(crate) enum Value {
     UnixFD(u32),
 
     String(String),
-    ObjectPath(ObjectPath),
+    ObjectPath(Vec<u8>),
     Signature(Vec<u8>),
     Struct(Vec<Value>),
-    Array(Vec<Value>),
+    Array(CompleteType, Vec<Value>),
     Variant(Box<Value>),
 }
 
 impl Value {
+    pub(crate) fn new_non_empty_auto_array(items: Vec<Value>) -> Self {
+        let Some(first_item) = items.iter().next() else {
+            panic!("an array must be non-empty");
+        };
+        let item_type = first_item.complete_type();
+        Self::Array(item_type, items)
+    }
+
     pub(crate) fn complete_type(&self) -> CompleteType {
         ValueRef::from(self).complete_type()
     }
@@ -44,7 +52,7 @@ pub(crate) enum ValueRef<'a> {
     ObjectPath(&'a [u8]),
     Signature(&'a [u8]),
     Struct(&'a [Value]),
-    Array(&'a [Value]),
+    Array(&'a CompleteType, &'a [Value]),
     Variant(&'a Value),
 }
 
@@ -62,10 +70,10 @@ impl<'a> From<&'a Value> for ValueRef<'a> {
             Value::Double(v) => Self::Double(*v),
             Value::UnixFD(v) => Self::UnixFD(*v),
             Value::String(v) => Self::String(v),
-            Value::ObjectPath(v) => Self::ObjectPath(v.as_bytes()),
+            Value::ObjectPath(v) => Self::ObjectPath(v),
             Value::Signature(v) => Self::Signature(v),
             Value::Struct(v) => Self::Struct(v),
-            Value::Array(v) => Self::Array(v),
+            Value::Array(item_type, v) => Self::Array(item_type, v),
             Value::Variant(v) => Self::Variant(v),
         }
     }
@@ -94,17 +102,13 @@ impl ValueRef<'_> {
                 }
                 CompleteType::Struct(types)
             }
-            Self::Array(items) => {
-                let Some(item) = items.first() else {
-                    panic!("can't represent empty array")
-                };
-                let item_type = ValueRef::from(item).complete_type();
+            Self::Array(item_type, items) => {
                 for item in items {
-                    if ValueRef::from(item).complete_type() != item_type {
+                    if ValueRef::from(item).complete_type() != *item_type {
                         panic!("heterogenous array")
                     }
                 }
-                CompleteType::Array(Box::new(item_type))
+                CompleteType::Array(Box::new(item_type.clone()))
             }
             Self::Variant(_value) => CompleteType::Variant,
         }

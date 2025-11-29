@@ -10,9 +10,6 @@ pub(crate) use message_type::MessageType;
 mod flags;
 pub(crate) use flags::Flags;
 
-mod object_path;
-pub(crate) use object_path::ObjectPath;
-
 mod signature;
 pub(crate) use signature::{CompleteType, Signature};
 

@@ -72,12 +72,12 @@ impl PollConnection {
         }
     }
 
-    pub(crate) fn enqueue(&mut self, mut message: Message) -> Result<Message> {
+    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
         let serial = self.serial.increment_and_get();
         message.header.serial = serial;
 
         self.writer.enqueue(&message)?;
-        Ok(message)
+        Ok(())
     }
 
     pub(crate) fn poll_auth_events(&mut self) -> i16 {

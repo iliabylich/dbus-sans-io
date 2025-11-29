@@ -5,14 +5,16 @@ mod blocking_connection;
 mod decoders;
 mod encoders;
 mod fsm;
+mod messages;
 mod poll_connection;
 mod serial;
 mod types;
 
 use crate::{
     blocking_connection::BlockingConnection,
+    messages::NameAcquired,
     poll_connection::PollConnection,
-    types::{Flags, Header, Message, MessageType, ObjectPath},
+    types::{CompleteType, Flags, Header, Message, MessageType, Value},
 };
 
 fn session_connection() -> UnixStream {
@@ -31,7 +33,7 @@ fn hello() -> Message {
         },
         member: Some(String::from("Hello")),
         interface: Some(String::from("org.freedesktop.DBus")),
-        path: Some(ObjectPath::new(b"/org/freedesktop/DBus".to_vec())),
+        path: Some(b"/org/freedesktop/DBus".to_vec()),
         error_name: None,
         reply_serial: None,
         destination: Some(String::from("org.freedesktop.DBus")),
@@ -42,15 +44,58 @@ fn hello() -> Message {
     }
 }
 
+fn show_notifiction() -> Message {
+    Message {
+        header: Header {
+            message_type: MessageType::MethodCall,
+            flags: Flags { byte: 0 },
+            serial: 0,
+            body_len: 0,
+        },
+        member: Some(String::from("Notify")),
+        interface: Some(String::from("org.freedesktop.Notifications")),
+        path: Some(b"/org/freedesktop/Notifications".to_vec()),
+        error_name: None,
+        reply_serial: None,
+        destination: Some(String::from("org.freedesktop.Notifications")),
+        sender: None,
+        signature: None,
+        unix_fds: None,
+        body: vec![
+            Value::String(String::from("")),
+            Value::UInt32(1),
+            Value::String(String::from("")),
+            Value::String(String::from("Header")),
+            Value::String(String::from("Body")),
+            Value::Array(
+                CompleteType::Struct(vec![CompleteType::String, CompleteType::Variant]),
+                vec![],
+            ),
+            Value::Int32(0),
+        ],
+    }
+}
+
 #[allow(dead_code)]
 fn main_blocking() {
+    // println!("{:?}", show_notifiction());
+    println!("{:?}", show_notifiction().compute_body_signature());
     let mut dbus = BlockingConnection::new(session_connection());
     let _guid = dbus.auth().unwrap();
-    let _serial = dbus.send_message(hello()).unwrap();
-    loop {
-        let msg = dbus.read_message().unwrap();
+    dbus.send_message(&mut hello()).unwrap();
 
-        println!("Received {:?}", msg);
+    loop {
+        let message = dbus.read_message().unwrap();
+
+        match NameAcquired::try_from(message) {
+            Ok(name_acquired) => {
+                println!("{name_acquired:?}");
+                // dbus.send_message(&mut show_notifiction()).unwrap();
+            }
+            Err(message) => {
+                println!("Received unknown {:?}", message);
+            }
+        }
     }
 }
 
@@ -84,7 +129,7 @@ fn main_poll() {
             break;
         }
     }
-    let _sent = dbus.enqueue(hello()).unwrap();
+    dbus.enqueue(&mut hello()).unwrap();
     loop {
         fds[0].events = dbus.poll_read_write_events();
         let (readable, writable) = do_poll(&mut fds);
@@ -102,6 +147,6 @@ fn main_poll() {
 }
 
 fn main() {
-    // main_blocking();
-    main_poll();
+    main_blocking();
+    // main_poll();
 }
