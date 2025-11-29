@@ -1,6 +1,6 @@
 use crate::{
     encoders::{EncodingBuffer, SignatureEncoder},
-    types::{HeaderFieldName, Value, ValueRef},
+    types::{HeaderFieldName, Value},
 };
 
 pub(crate) struct ValueEncoder;
@@ -70,14 +70,14 @@ impl ValueEncoder {
     pub(crate) fn encode_struct(buf: &mut EncodingBuffer, fields: &[Value]) {
         Self::encode_u32(buf, fields.len() as u32);
         for field in fields {
-            Self::encode_value(buf, ValueRef::from(field));
+            Self::encode_value(buf, field);
         }
     }
 
     pub(crate) fn encode_array(buf: &mut EncodingBuffer, items: &[Value]) {
         Self::encode_u32(buf, items.len() as u32);
         for item in items {
-            Self::encode_value(buf, ValueRef::from(item));
+            Self::encode_value(buf, item);
         }
     }
 
@@ -88,27 +88,27 @@ impl ValueEncoder {
         SignatureEncoder::encode_complete_type(buf, &value.complete_type());
         buf.set_u8(start - 1, (buf.size() - start) as u8).unwrap();
         buf.encode_u8(0);
-        Self::encode_value(buf, ValueRef::from(value));
+        Self::encode_value(buf, value);
     }
 
-    pub(crate) fn encode_value(buf: &mut EncodingBuffer, value: ValueRef<'_>) {
+    pub(crate) fn encode_value(buf: &mut EncodingBuffer, value: &Value) {
         match value {
-            ValueRef::Byte(value) => Self::encode_u8(buf, value),
-            ValueRef::Bool(value) => Self::encode_bool(buf, value),
-            ValueRef::Int16(value) => Self::encode_i16(buf, value),
-            ValueRef::UInt16(value) => Self::encode_u16(buf, value),
-            ValueRef::Int32(value) => Self::encode_i32(buf, value),
-            ValueRef::UInt32(value) => Self::encode_u32(buf, value),
-            ValueRef::Int64(value) => Self::encode_i64(buf, value),
-            ValueRef::UInt64(value) => Self::encode_u64(buf, value),
-            ValueRef::Double(value) => Self::encode_f64(buf, value),
-            ValueRef::UnixFD(value) => Self::encode_u32(buf, value),
-            ValueRef::String(s) => Self::encode_str(buf, s),
-            ValueRef::ObjectPath(path) => Self::encode_object_path(buf, path),
-            ValueRef::Signature(sig) => Self::encode_signature(buf, sig),
-            ValueRef::Struct(fields) => Self::encode_struct(buf, fields),
-            ValueRef::Array(_item_type, items) => Self::encode_array(buf, items),
-            ValueRef::Variant(_inner) => todo!(),
+            Value::Byte(value) => Self::encode_u8(buf, *value),
+            Value::Bool(value) => Self::encode_bool(buf, *value),
+            Value::Int16(value) => Self::encode_i16(buf, *value),
+            Value::UInt16(value) => Self::encode_u16(buf, *value),
+            Value::Int32(value) => Self::encode_i32(buf, *value),
+            Value::UInt32(value) => Self::encode_u32(buf, *value),
+            Value::Int64(value) => Self::encode_i64(buf, *value),
+            Value::UInt64(value) => Self::encode_u64(buf, *value),
+            Value::Double(value) => Self::encode_f64(buf, *value),
+            Value::UnixFD(value) => Self::encode_u32(buf, *value),
+            Value::String(s) => Self::encode_str(buf, s),
+            Value::ObjectPath(path) => Self::encode_object_path(buf, path),
+            Value::Signature(sig) => Self::encode_signature(buf, sig),
+            Value::Struct(fields) => Self::encode_struct(buf, fields),
+            Value::Array(_item_type, items) => Self::encode_array(buf, items),
+            Value::Variant(_inner) => todo!(),
         }
     }
 }

@@ -21,5 +21,3 @@ pub(crate) use guid::GUID;
 
 mod header;
 pub(crate) use header::Header;
-
-pub(crate) use value::ValueRef;

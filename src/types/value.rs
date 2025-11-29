@@ -31,56 +31,6 @@ impl Value {
     }
 
     pub(crate) fn complete_type(&self) -> CompleteType {
-        ValueRef::from(self).complete_type()
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum ValueRef<'a> {
-    Byte(u8),
-    Bool(bool),
-    Int16(i16),
-    UInt16(u16),
-    Int32(i32),
-    UInt32(u32),
-    Int64(i64),
-    UInt64(u64),
-    Double(f64),
-    UnixFD(u32),
-
-    String(&'a str),
-    ObjectPath(&'a [u8]),
-    Signature(&'a [u8]),
-    Struct(&'a [Value]),
-    Array(&'a CompleteType, &'a [Value]),
-    Variant(&'a Value),
-}
-
-impl<'a> From<&'a Value> for ValueRef<'a> {
-    fn from(value: &'a Value) -> Self {
-        match value {
-            Value::Byte(v) => Self::Byte(*v),
-            Value::Bool(v) => Self::Bool(*v),
-            Value::Int16(v) => Self::Int16(*v),
-            Value::UInt16(v) => Self::UInt16(*v),
-            Value::Int32(v) => Self::Int32(*v),
-            Value::UInt32(v) => Self::UInt32(*v),
-            Value::Int64(v) => Self::Int64(*v),
-            Value::UInt64(v) => Self::UInt64(*v),
-            Value::Double(v) => Self::Double(*v),
-            Value::UnixFD(v) => Self::UnixFD(*v),
-            Value::String(v) => Self::String(v),
-            Value::ObjectPath(v) => Self::ObjectPath(v),
-            Value::Signature(v) => Self::Signature(v),
-            Value::Struct(v) => Self::Struct(v),
-            Value::Array(item_type, v) => Self::Array(item_type, v),
-            Value::Variant(v) => Self::Variant(v),
-        }
-    }
-}
-
-impl ValueRef<'_> {
-    pub(crate) fn complete_type(self) -> CompleteType {
         match self {
             Self::Byte(_) => CompleteType::Byte,
             Self::Bool(_) => CompleteType::Bool,
@@ -98,13 +48,13 @@ impl ValueRef<'_> {
             Self::Struct(values) => {
                 let mut types = vec![];
                 for value in values {
-                    types.push(ValueRef::from(value).complete_type());
+                    types.push(value.complete_type());
                 }
                 CompleteType::Struct(types)
             }
             Self::Array(item_type, items) => {
                 for item in items {
-                    if ValueRef::from(item).complete_type() != *item_type {
+                    if item.complete_type() != *item_type {
                         panic!("heterogenous array")
                     }
                 }
