@@ -95,7 +95,8 @@ impl ValueDecoder {
             CompleteType::Int64
             | CompleteType::UInt64
             | CompleteType::Double
-            | CompleteType::Struct(_) => buf.align(8)?,
+            | CompleteType::Struct(_)
+            | CompleteType::DictEntry(_, _) => buf.align(8)?,
             CompleteType::Signature | CompleteType::Variant => {}
         }
 
@@ -119,6 +120,17 @@ impl ValueDecoder {
             fields.push(value);
         }
         Ok(fields)
+    }
+
+    fn decode_dict_entry(
+        buf: &mut DecodingBuffer,
+        key_type: &CompleteType,
+        value_type: &CompleteType,
+    ) -> Result<(Value, Value)> {
+        buf.align(8)?;
+        let key = Self::decode_value_by_complete_type(buf, key_type)?;
+        let value = Self::decode_value_by_complete_type(buf, value_type)?;
+        Ok((key, value))
     }
 
     pub(crate) fn decode_value_by_complete_type(
@@ -185,6 +197,10 @@ impl ValueDecoder {
             CompleteType::Array(item_signature) => {
                 let items = Self::decode_array(buf, item_signature)?;
                 Ok(Value::Array(*item_signature.clone(), items))
+            }
+            CompleteType::DictEntry(key_type, value_type) => {
+                let (key, value) = Self::decode_dict_entry(buf, key_type, value_type)?;
+                Ok(Value::DictEntry(Box::new(key), Box::new(value)))
             }
             CompleteType::Variant => {
                 let complete_type = Self::decode_complete_type(buf)?;

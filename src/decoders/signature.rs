@@ -34,6 +34,13 @@ impl SignatureDecoder {
                 Ok(CompleteType::Struct(fields))
             }
 
+            b'{' => {
+                let key = Self::decode_complete_type(buf)?;
+                let value = Self::decode_complete_type(buf)?;
+                ensure!(buf.next_u8().is_ok_and(|b| b == b'}'));
+                Ok(CompleteType::DictEntry(Box::new(key), Box::new(value)))
+            }
+
             b'a' => {
                 let item = Self::decode_complete_type(buf)?;
                 Ok(CompleteType::Array(Box::new(item)))

@@ -74,6 +74,12 @@ impl ValueEncoder {
         }
     }
 
+    pub(crate) fn encode_dict_entry(buf: &mut EncodingBuffer, key: &Value, value: &Value) {
+        buf.align(8);
+        Self::encode_value(buf, key);
+        Self::encode_value(buf, value);
+    }
+
     pub(crate) fn encode_array(
         buf: &mut EncodingBuffer,
         item_type: &CompleteType,
@@ -96,7 +102,8 @@ impl ValueEncoder {
             CompleteType::Int64
             | CompleteType::UInt64
             | CompleteType::Double
-            | CompleteType::Struct(_) => buf.align(8),
+            | CompleteType::Struct(_)
+            | CompleteType::DictEntry(_, _) => buf.align(8),
             CompleteType::Signature | CompleteType::Variant => {}
         }
 
@@ -137,6 +144,7 @@ impl ValueEncoder {
             Value::Signature(sig) => Self::encode_signature(buf, sig),
             Value::Struct(fields) => Self::encode_struct(buf, fields),
             Value::Array(item_type, items) => Self::encode_array(buf, item_type, items),
+            Value::DictEntry(key, value) => Self::encode_dict_entry(buf, key, value),
             Value::Variant(_inner) => todo!(),
         }
     }

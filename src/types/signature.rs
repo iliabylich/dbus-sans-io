@@ -16,6 +16,7 @@ pub(crate) enum CompleteType {
     Signature,
     Struct(Vec<CompleteType>),
     Array(Box<CompleteType>),
+    DictEntry(Box<CompleteType>, Box<CompleteType>),
     Variant,
 }
 

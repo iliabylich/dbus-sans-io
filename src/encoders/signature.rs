@@ -34,6 +34,12 @@ impl SignatureEncoder {
                 buf.encode_u8(b'a');
                 Self::encode_complete_type(buf, item);
             }
+            CompleteType::DictEntry(key, value) => {
+                buf.encode_u8(b'{');
+                Self::encode_complete_type(buf, key);
+                Self::encode_complete_type(buf, value);
+                buf.encode_u8(b'}');
+            }
             CompleteType::Variant => {
                 buf.encode_u8(b'v');
             }

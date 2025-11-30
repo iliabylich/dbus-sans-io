@@ -71,7 +71,10 @@ fn show_notifiction(sender: &str) -> Message {
             Value::String(String::from("Body")),
             Value::Array(CompleteType::String, vec![]),
             Value::Array(
-                CompleteType::Struct(vec![CompleteType::String, CompleteType::Variant]),
+                CompleteType::DictEntry(
+                    Box::new(CompleteType::String),
+                    Box::new(CompleteType::Variant),
+                ),
                 vec![],
             ),
             Value::Int32(1_000),

@@ -18,6 +18,7 @@ pub(crate) enum Value {
     Signature(Vec<u8>),
     Struct(Vec<Value>),
     Array(CompleteType, Vec<Value>),
+    DictEntry(Box<Value>, Box<Value>),
     Variant(Box<Value>),
 }
 
@@ -60,6 +61,10 @@ impl Value {
                 }
                 CompleteType::Array(Box::new(item_type.clone()))
             }
+            Self::DictEntry(key, value) => CompleteType::DictEntry(
+                Box::new(key.complete_type()),
+                Box::new(value.complete_type()),
+            ),
             Self::Variant(_value) => CompleteType::Variant,
         }
     }
