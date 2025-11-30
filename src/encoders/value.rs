@@ -89,23 +89,7 @@ impl ValueEncoder {
         let len_pos = buf.size();
         buf.encode_u32(0);
 
-        match item_type {
-            CompleteType::Byte => {}
-            CompleteType::Bool
-            | CompleteType::Int32
-            | CompleteType::UInt32
-            | CompleteType::UnixFD
-            | CompleteType::String
-            | CompleteType::ObjectPath
-            | CompleteType::Array(_) => buf.align(4),
-            CompleteType::Int16 | CompleteType::UInt16 => buf.align(2),
-            CompleteType::Int64
-            | CompleteType::UInt64
-            | CompleteType::Double
-            | CompleteType::Struct(_)
-            | CompleteType::DictEntry(_, _) => buf.align(8),
-            CompleteType::Signature | CompleteType::Variant => {}
-        }
+        buf.align(item_type.alignment());
 
         let data_start = buf.size();
         for item in items {

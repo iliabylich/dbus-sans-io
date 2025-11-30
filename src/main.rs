@@ -46,7 +46,7 @@ fn hello() -> Message {
     }
 }
 
-fn show_notifiction(sender: &str) -> Message {
+fn show_notifiction() -> Message {
     Message {
         header: Header {
             message_type: MessageType::MethodCall,
@@ -60,7 +60,7 @@ fn show_notifiction(sender: &str) -> Message {
         error_name: None,
         reply_serial: None,
         destination: Some(String::from("org.freedesktop.Notifications")),
-        sender: Some(sender.to_string()),
+        sender: None,
         signature: None,
         unix_fds: None,
         body: vec![
@@ -97,8 +97,7 @@ fn main_blocking() {
         match NameAcquired::try_from(message) {
             Ok(name_acquired) => {
                 println!("{name_acquired:?}");
-                let sender = name_acquired.name;
-                dbus.send_message(&mut show_notifiction(&sender)).unwrap();
+                dbus.send_message(&mut show_notifiction()).unwrap();
                 println!("notification sent");
             }
             Err(message) => {
@@ -152,8 +151,7 @@ fn main_poll() {
                 match NameAcquired::try_from(message) {
                     Ok(name_acquired) => {
                         println!("{name_acquired:?}");
-                        let sender = name_acquired.name;
-                        dbus.enqueue(&mut show_notifiction(&sender)).unwrap();
+                        dbus.enqueue(&mut show_notifiction()).unwrap();
                     }
                     Err(message) => {
                         println!("Unknown: {:?}", message);
@@ -165,8 +163,8 @@ fn main_poll() {
 }
 
 fn main() {
-    main_blocking();
-    // main_poll();
+    // main_blocking();
+    main_poll();
 }
 
 #[test]
@@ -179,7 +177,7 @@ fn test_encode_decode_hello() {
 
 #[test]
 fn test_encode_decode_show_notification() {
-    let message = show_notifiction(":1.100");
+    let message = show_notifiction();
     let encoded = MessageEncoder::encode(&message).unwrap();
     let decoded = MessageDecoder::decode(&encoded).unwrap();
     assert_eq!(message, decoded);

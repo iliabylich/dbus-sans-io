@@ -82,23 +82,7 @@ impl ValueDecoder {
     fn decode_array(buf: &mut DecodingBuffer, item_type: &CompleteType) -> Result<Vec<Value>> {
         let byte_len = Self::decode_u32(buf)? as usize;
 
-        match item_type {
-            CompleteType::Byte => {}
-            CompleteType::Bool
-            | CompleteType::Int32
-            | CompleteType::UInt32
-            | CompleteType::UnixFD
-            | CompleteType::String
-            | CompleteType::ObjectPath
-            | CompleteType::Array(_) => buf.align(4)?,
-            CompleteType::Int16 | CompleteType::UInt16 => buf.align(2)?,
-            CompleteType::Int64
-            | CompleteType::UInt64
-            | CompleteType::Double
-            | CompleteType::Struct(_)
-            | CompleteType::DictEntry(_, _) => buf.align(8)?,
-            CompleteType::Signature | CompleteType::Variant => {}
-        }
+        buf.align(item_type.alignment())?;
 
         let start_pos = buf.pos();
         let end_pos = start_pos + byte_len;

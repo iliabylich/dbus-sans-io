@@ -22,7 +22,6 @@ impl WriterFSM {
 
     pub(crate) fn enqueue(&mut self, message: &Message) -> Result<()> {
         let buf = MessageEncoder::encode(message)?;
-        println!("Enqueuing {buf:?}");
         self.queue.push_back(QueueItem { pos: 0, buf });
         Ok(())
     }
