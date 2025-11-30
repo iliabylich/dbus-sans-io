@@ -12,17 +12,6 @@ impl MessageDecoder {
         let mut buf = DecodingBuffer::new(&bytes);
         let header = HeaderDecoder::decode(&mut buf)?;
 
-        let mut header_fields = vec![];
-        let len = buf.next_u32()?;
-        let end = buf.pos() + len as usize;
-        let signature = CompleteType::Struct(vec![CompleteType::Byte, CompleteType::Variant]);
-
-        while buf.pos() < end {
-            buf.align(8)?;
-            let header = ValueDecoder::decode_value_by_complete_type(&mut buf, &signature)?;
-            header_fields.push(header);
-        }
-
         let mut path = None;
         let mut interface = None;
         let mut member = None;
@@ -32,7 +21,17 @@ impl MessageDecoder {
         let mut sender = None;
         let mut signature = None;
         let mut unix_fds = None;
-        for header_field in header_fields {
+
+        let len = buf.next_u32()?;
+        let end = buf.pos() + len as usize;
+        let header_field_type =
+            CompleteType::Struct(vec![CompleteType::Byte, CompleteType::Variant]);
+
+        while buf.pos() < end {
+            buf.align(8)?;
+            let header_field =
+                ValueDecoder::decode_value_by_complete_type(&mut buf, &header_field_type)?;
+
             let Value::Struct(pair) = header_field else {
                 bail!("got {header_field:?} instead of a header field struct");
             };
