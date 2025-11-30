@@ -12,6 +12,8 @@ mod types;
 
 use crate::{
     blocking_connection::BlockingConnection,
+    decoders::MessageDecoder,
+    encoders::MessageEncoder,
     messages::NameAcquired,
     poll_connection::PollConnection,
     types::{CompleteType, Flags, Header, Message, MessageType, Value},
@@ -44,7 +46,7 @@ fn hello() -> Message {
     }
 }
 
-fn show_notifiction() -> Message {
+fn show_notifiction(sender: &str) -> Message {
     Message {
         header: Header {
             message_type: MessageType::MethodCall,
@@ -58,7 +60,7 @@ fn show_notifiction() -> Message {
         error_name: None,
         reply_serial: None,
         destination: Some(String::from("org.freedesktop.Notifications")),
-        sender: None,
+        sender: Some(sender.to_string()),
         signature: None,
         unix_fds: None,
         body: vec![
@@ -67,19 +69,21 @@ fn show_notifiction() -> Message {
             Value::String(String::from("")),
             Value::String(String::from("Header")),
             Value::String(String::from("Body")),
+            Value::Array(CompleteType::Struct(vec![CompleteType::String]), vec![]),
             Value::Array(
                 CompleteType::Struct(vec![CompleteType::String, CompleteType::Variant]),
                 vec![],
             ),
-            Value::Int32(0),
+            Value::Int32(1_000),
         ],
     }
+    .with_generated_signature()
 }
 
 #[allow(dead_code)]
 fn main_blocking() {
     // println!("{:?}", show_notifiction());
-    println!("{:?}", show_notifiction().compute_body_signature());
+    // println!("{:?}", show_notifiction().with_generated_signature());
     let mut dbus = BlockingConnection::new(session_connection());
     let _guid = dbus.auth().unwrap();
     dbus.send_message(&mut hello()).unwrap();
@@ -90,7 +94,9 @@ fn main_blocking() {
         match NameAcquired::try_from(message) {
             Ok(name_acquired) => {
                 println!("{name_acquired:?}");
-                // dbus.send_message(&mut show_notifiction()).unwrap();
+                let sender = name_acquired.name;
+                dbus.send_message(&mut show_notifiction(&sender)).unwrap();
+                println!("notification sent");
             }
             Err(message) => {
                 println!("Received unknown {:?}", message);
@@ -140,7 +146,16 @@ fn main_poll() {
 
         if readable {
             while let Some(message) = dbus.poll_read_one_message().unwrap() {
-                println!("Received: {:?}", message);
+                match NameAcquired::try_from(message) {
+                    Ok(name_acquired) => {
+                        println!("{name_acquired:?}");
+                        let sender = name_acquired.name;
+                        dbus.enqueue(&mut show_notifiction(&sender)).unwrap();
+                    }
+                    Err(message) => {
+                        println!("Unknown: {:?}", message);
+                    }
+                }
             }
         }
     }
@@ -149,4 +164,20 @@ fn main_poll() {
 fn main() {
     main_blocking();
     // main_poll();
+}
+
+#[test]
+fn test_encode_decode_hello() {
+    let message = hello();
+    let encoded = MessageEncoder::encode(&message).unwrap();
+    let decoded = MessageDecoder::decode(&encoded).unwrap();
+    assert_eq!(message, decoded);
+}
+
+#[test]
+fn test_encode_decode_show_notification() {
+    let message = show_notifiction(":1.100");
+    let encoded = MessageEncoder::encode(&message).unwrap();
+    let decoded = MessageDecoder::decode(&encoded).unwrap();
+    assert_eq!(message, decoded);
 }

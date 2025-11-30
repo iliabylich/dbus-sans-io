@@ -40,7 +40,7 @@ impl SignatureEncoder {
         }
     }
 
-    fn encode_signature(buf: &mut EncodingBuffer, signature: &Signature) {
+    pub(crate) fn encode_signature(buf: &mut EncodingBuffer, signature: &Signature) {
         for complete_type in &signature.items {
             Self::encode_complete_type(buf, complete_type);
         }

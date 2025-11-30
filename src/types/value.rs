@@ -1,6 +1,6 @@
 use crate::types::signature::CompleteType;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Value {
     Byte(u8),
     Bool(bool),

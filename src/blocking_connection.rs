@@ -57,6 +57,8 @@ impl BlockingConnection {
                 break;
             };
             let len = self.stream.write(buf)?;
+            println!("Done writing");
+            self.stream.flush().unwrap();
             self.writer.satisfy(len)?;
         }
 

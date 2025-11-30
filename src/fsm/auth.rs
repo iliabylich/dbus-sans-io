@@ -128,14 +128,14 @@ fn test_auth_fsm() {
     assert_eq!(fsm.wants(), AuthWants::Write(AUTH_EXTERNAL));
     fsm.satisfy_write(AUTH_EXTERNAL.len()).unwrap();
 
-    let AuthWants::Read(buffer) = dbg!(fsm.wants()) else {
+    let AuthWants::Read(buffer) = fsm.wants() else {
         panic!("wrong next action");
     };
     let chunk = b"DAT";
     buffer[..chunk.len()].copy_from_slice(chunk);
     fsm.satisfy_read(chunk.len()).unwrap();
 
-    let AuthWants::Read(buffer) = dbg!(fsm.wants()) else {
+    let AuthWants::Read(buffer) = fsm.wants() else {
         panic!("wrong next action");
     };
     let chunk = b"A\r\n";
@@ -148,7 +148,7 @@ fn test_auth_fsm() {
     assert_eq!(fsm.wants(), AuthWants::Write(b"A\r\n"));
     fsm.satisfy_write(3).unwrap();
 
-    let AuthWants::Read(buffer) = dbg!(fsm.wants()) else {
+    let AuthWants::Read(buffer) = fsm.wants() else {
         panic!("wrong next action");
     };
     let guid = b"OK a97099b37b54cdc2a686559c6922fdeb\r\n";

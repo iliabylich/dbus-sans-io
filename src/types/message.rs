@@ -1,6 +1,6 @@
 use crate::types::{Header, Signature, Value};
 
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub(crate) struct Message {
     pub(crate) header: Header,
 
@@ -18,10 +18,11 @@ pub(crate) struct Message {
 }
 
 impl Message {
-    pub(crate) fn compute_body_signature(&self) -> Signature {
-        Signature {
+    pub(crate) fn with_generated_signature(mut self) -> Self {
+        self.signature = Some(Signature {
             items: self.body.iter().map(|item| item.complete_type()).collect(),
-        }
+        });
+        self
     }
 }
 

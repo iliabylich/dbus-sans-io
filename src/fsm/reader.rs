@@ -55,7 +55,7 @@ impl ReaderFSM {
 
             State::ReadingFullMessage => {
                 let buf = self.buf.take().into_vec();
-                let message = MessageDecoder::decode(buf)?;
+                let message = MessageDecoder::decode(&buf)?;
                 *self = Self::new();
                 Ok(Some(message))
             }

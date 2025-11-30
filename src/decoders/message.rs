@@ -8,8 +8,8 @@ use anyhow::{Result, bail, ensure};
 pub(crate) struct MessageDecoder;
 
 impl MessageDecoder {
-    pub(crate) fn decode(bytes: Vec<u8>) -> Result<Message> {
-        let mut buf = DecodingBuffer::new(&bytes);
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Message> {
+        let mut buf = DecodingBuffer::new(bytes);
         let header = HeaderDecoder::decode(&mut buf)?;
 
         let mut path = None;
@@ -73,7 +73,7 @@ impl MessageDecoder {
                 }
                 (HeaderFieldName::Signature, Value::Signature(value)) => {
                     let mut buf = DecodingBuffer::new(&value);
-                    signature = Some(SignatureDecoder::decode_signature(&mut buf)?)
+                    signature = Some(SignatureDecoder::decode_signature(&mut buf)?);
                 }
                 (HeaderFieldName::UnixFds, Value::UInt32(value)) => {
                     unix_fds = Some(value);

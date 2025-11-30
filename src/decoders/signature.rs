@@ -39,9 +39,7 @@ impl SignatureDecoder {
                 Ok(CompleteType::Array(Box::new(item)))
             }
 
-            b'v' => {
-                todo!()
-            }
+            b'v' => Ok(CompleteType::Variant),
 
             other => bail!("unknown signature member: {}", other as char),
         }

@@ -1,5 +1,5 @@
 use crate::{
-    encoders::{EncodingBuffer, HeaderEncoder, ValueEncoder},
+    encoders::{EncodingBuffer, HeaderEncoder, SignatureEncoder, ValueEncoder},
     types::{HeaderFieldName, Message, Value},
 };
 use anyhow::Result;
@@ -71,14 +71,17 @@ impl MessageEncoder {
                     &Value::String(sender.clone()),
                 );
             }
-            // if let Some(signature) = message.signature.as_ref() {
-            //     buf.align(8);
-            //     ValueEncoder::encode_header(
-            //         &mut buf,
-            //         HeaderFieldName::Signature,
-            //         &Value::Signature(signature.clone()),
-            //     );
-            // }
+            if let Some(signature) = message.signature.as_ref() {
+                buf.align(8);
+                let mut sig_buf = EncodingBuffer::new();
+                SignatureEncoder::encode_signature(&mut sig_buf, signature);
+                let sig_buf = sig_buf.done();
+                ValueEncoder::encode_header(
+                    &mut buf,
+                    HeaderFieldName::Signature,
+                    &Value::Signature(sig_buf),
+                );
+            }
             if let Some(unix_fds) = message.unix_fds.as_ref() {
                 buf.align(8);
                 ValueEncoder::encode_header(
@@ -95,7 +98,9 @@ impl MessageEncoder {
 
         // TODO: write body once we have some
         let body_starts_at = buf.size();
-        assert_eq!(message.body.len(), 0);
+        for value in &message.body {
+            ValueEncoder::encode_value(&mut buf, value);
+        }
         let body_len = buf.size() - body_starts_at;
         buf.set_u32(4, body_len as u32)?;
 
