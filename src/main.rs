@@ -69,7 +69,7 @@ fn show_notifiction(sender: &str) -> Message {
             Value::String(String::from("")),
             Value::String(String::from("Header")),
             Value::String(String::from("Body")),
-            Value::Array(CompleteType::Struct(vec![CompleteType::String]), vec![]),
+            Value::Array(CompleteType::String, vec![]),
             Value::Array(
                 CompleteType::Struct(vec![CompleteType::String, CompleteType::Variant]),
                 vec![],

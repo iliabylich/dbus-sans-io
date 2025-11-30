@@ -80,16 +80,39 @@ impl ValueDecoder {
     }
 
     fn decode_array(buf: &mut DecodingBuffer, item_type: &CompleteType) -> Result<Vec<Value>> {
-        let items_count = Self::decode_u32(buf)?;
-        let mut items = Vec::with_capacity(items_count as usize);
-        for _ in 0..items_count {
+        let byte_len = Self::decode_u32(buf)? as usize;
+
+        match item_type {
+            CompleteType::Byte => {}
+            CompleteType::Bool
+            | CompleteType::Int32
+            | CompleteType::UInt32
+            | CompleteType::UnixFD
+            | CompleteType::String
+            | CompleteType::ObjectPath
+            | CompleteType::Array(_) => buf.align(4)?,
+            CompleteType::Int16 | CompleteType::UInt16 => buf.align(2)?,
+            CompleteType::Int64
+            | CompleteType::UInt64
+            | CompleteType::Double
+            | CompleteType::Struct(_) => buf.align(8)?,
+            CompleteType::Signature | CompleteType::Variant => {}
+        }
+
+        let start_pos = buf.pos();
+        let end_pos = start_pos + byte_len;
+
+        let mut items = vec![];
+        while buf.pos() < end_pos {
             let item = Self::decode_value_by_complete_type(buf, item_type)?;
             items.push(item);
         }
+
         Ok(items)
     }
 
     fn decode_struct(buf: &mut DecodingBuffer, field_types: &[CompleteType]) -> Result<Vec<Value>> {
+        buf.align(8)?;
         let mut fields = vec![];
         for field_type in field_types {
             let value = Self::decode_value_by_complete_type(buf, field_type)?;

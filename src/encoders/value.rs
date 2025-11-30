@@ -1,6 +1,6 @@
 use crate::{
     encoders::{EncodingBuffer, SignatureEncoder},
-    types::{HeaderFieldName, Value},
+    types::{CompleteType, HeaderFieldName, Value},
 };
 
 pub(crate) struct ValueEncoder;
@@ -68,17 +68,46 @@ impl ValueEncoder {
     }
 
     pub(crate) fn encode_struct(buf: &mut EncodingBuffer, fields: &[Value]) {
-        Self::encode_u32(buf, fields.len() as u32);
+        buf.align(8);
         for field in fields {
             Self::encode_value(buf, field);
         }
     }
 
-    pub(crate) fn encode_array(buf: &mut EncodingBuffer, items: &[Value]) {
-        Self::encode_u32(buf, items.len() as u32);
+    pub(crate) fn encode_array(
+        buf: &mut EncodingBuffer,
+        item_type: &CompleteType,
+        items: &[Value],
+    ) {
+        buf.align(4);
+        let len_pos = buf.size();
+        buf.encode_u32(0);
+
+        match item_type {
+            CompleteType::Byte => {}
+            CompleteType::Bool
+            | CompleteType::Int32
+            | CompleteType::UInt32
+            | CompleteType::UnixFD
+            | CompleteType::String
+            | CompleteType::ObjectPath
+            | CompleteType::Array(_) => buf.align(4),
+            CompleteType::Int16 | CompleteType::UInt16 => buf.align(2),
+            CompleteType::Int64
+            | CompleteType::UInt64
+            | CompleteType::Double
+            | CompleteType::Struct(_) => buf.align(8),
+            CompleteType::Signature | CompleteType::Variant => {}
+        }
+
+        let data_start = buf.size();
         for item in items {
             Self::encode_value(buf, item);
         }
+        let data_end = buf.size();
+        let byte_len = (data_end - data_start) as u32;
+
+        buf.set_u32(len_pos, byte_len).unwrap();
     }
 
     pub(crate) fn encode_header(buf: &mut EncodingBuffer, field: HeaderFieldName, value: &Value) {
@@ -107,7 +136,7 @@ impl ValueEncoder {
             Value::ObjectPath(path) => Self::encode_object_path(buf, path),
             Value::Signature(sig) => Self::encode_signature(buf, sig),
             Value::Struct(fields) => Self::encode_struct(buf, fields),
-            Value::Array(_item_type, items) => Self::encode_array(buf, items),
+            Value::Array(item_type, items) => Self::encode_array(buf, item_type, items),
             Value::Variant(_inner) => todo!(),
         }
     }
