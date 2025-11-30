@@ -44,7 +44,7 @@ impl CompleteType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub(crate) struct Signature {
     pub(crate) items: Vec<CompleteType>,
 }

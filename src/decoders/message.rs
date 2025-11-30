@@ -1,9 +1,8 @@
 use crate::{
-    Message,
     decoders::{DecodingBuffer, HeaderDecoder, ValueDecoder, signature::SignatureDecoder},
-    types::{CompleteType, HeaderFieldName, Value},
+    types::{CompleteType, Header, HeaderFieldName, Message, MessageType, Value},
 };
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 pub(crate) struct MessageDecoder;
 
@@ -87,14 +86,15 @@ impl MessageDecoder {
         }
 
         let mut body = vec![];
-        if let Some(signature) = signature.as_ref() {
+        if let Some(signature) = signature.as_ref()
+            && !signature.items.is_empty()
+        {
             buf.align(8)?;
             body = ValueDecoder::decode_values_by_signature(&mut buf, signature)?;
         }
 
-        Ok(Message {
+        build_message(
             header,
-            body,
             path,
             interface,
             member,
@@ -102,8 +102,121 @@ impl MessageDecoder {
             reply_serial,
             destination,
             sender,
-            signature,
             unix_fds,
-        })
+            body,
+        )
+    }
+}
+
+fn build_message(
+    header: Header,
+    path: Option<Vec<u8>>,
+    interface: Option<String>,
+    member: Option<String>,
+    error_name: Option<String>,
+    reply_serial: Option<u32>,
+    destination: Option<String>,
+    sender: Option<String>,
+    unix_fds: Option<u32>,
+    body: Vec<Value>,
+) -> Result<Message> {
+    match header.message_type {
+        MessageType::MethodCall => {
+            let path = path.context("MethodCall missing path")?;
+            let member = member.context("MethodCall missing member")?;
+
+            if error_name.is_some() {
+                bail!("MethodCall should not have error_name");
+            }
+            if reply_serial.is_some() {
+                bail!("MethodCall should not have reply_serial");
+            }
+
+            Ok(Message::MethodCall {
+                serial: header.serial,
+                path,
+                member,
+                interface,
+                destination,
+                sender,
+                unix_fds,
+                body,
+            })
+        }
+        MessageType::MethodReturn => {
+            let reply_serial = reply_serial.context("MethodReturn missing reply_serial")?;
+
+            if path.is_some() {
+                bail!("MethodReturn should not have path");
+            }
+            if member.is_some() {
+                bail!("MethodReturn should not have member");
+            }
+            if interface.is_some() {
+                bail!("MethodReturn should not have interface");
+            }
+            if error_name.is_some() {
+                bail!("MethodReturn should not have error_name");
+            }
+
+            Ok(Message::MethodReturn {
+                serial: header.serial,
+                reply_serial,
+                destination,
+                sender,
+                unix_fds,
+                body,
+            })
+        }
+        MessageType::Error => {
+            let error_name = error_name.context("Error missing error_name")?;
+            let reply_serial = reply_serial.context("Error missing reply_serial")?;
+
+            if path.is_some() {
+                bail!("Error should not have path");
+            }
+            if member.is_some() {
+                bail!("Error should not have member");
+            }
+            if interface.is_some() {
+                bail!("Error should not have interface");
+            }
+
+            Ok(Message::Error {
+                serial: header.serial,
+                error_name,
+                reply_serial,
+                destination,
+                sender,
+                unix_fds,
+                body,
+            })
+        }
+        MessageType::Signal => {
+            let path = path.context("Signal missing path")?;
+            let interface = interface.context("Signal missing interface")?;
+            let member = member.context("Signal missing member")?;
+
+            if error_name.is_some() {
+                bail!("Signal should not have error_name");
+            }
+            if reply_serial.is_some() {
+                bail!("Signal should not have reply_serial");
+            }
+
+            Ok(Message::Signal {
+                serial: header.serial,
+                path,
+                interface,
+                member,
+                destination,
+                sender,
+                unix_fds,
+                body,
+            })
+        }
+        MessageType::Invalid => {
+            bail!("Invalid message type")
+        }
     }
 }

@@ -1,6 +1,6 @@
 use anyhow::ensure;
 
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(PartialEq, Eq, Default)]
 pub(crate) struct GUID(pub(crate) Vec<u8>);
 
 impl GUID {

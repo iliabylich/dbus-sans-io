@@ -1,25 +1,22 @@
-use std::{cell::RefCell, rc::Rc};
+use std::cell::Cell;
 
-#[derive(Clone)]
 pub(crate) struct Serial {
-    counter: Rc<RefCell<u32>>,
+    counter: Cell<u32>,
 }
 
 impl Serial {
     pub(crate) fn zero() -> Self {
         Self {
-            counter: Rc::new(RefCell::new(0)),
+            counter: Cell::new(0),
         }
     }
 
     pub(crate) fn increment(&self) {
-        let mut counter = self.counter.borrow_mut();
-        *counter += 1;
+        self.counter.update(|v| v + 1);
     }
 
     pub(crate) fn get(&self) -> u32 {
-        let counter = self.counter.borrow();
-        *counter
+        self.counter.get()
     }
 
     pub(crate) fn increment_and_get(&self) -> u32 {

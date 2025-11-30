@@ -73,8 +73,7 @@ impl PollConnection {
     }
 
     pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
-        let serial = self.serial.increment_and_get();
-        message.header.serial = serial;
+        *message.serial_mut() = self.serial.increment_and_get();
 
         self.writer.enqueue(&message)?;
         Ok(())

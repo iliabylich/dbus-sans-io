@@ -1,7 +1,6 @@
 use crate::{
-    MessageType,
     decoders::DecodingBuffer,
-    types::{Flags, Header},
+    types::{Flags, Header, MessageType},
 };
 use anyhow::Result;
 

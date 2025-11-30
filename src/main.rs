@@ -16,7 +16,7 @@ use crate::{
     encoders::MessageEncoder,
     messages::NameAcquired,
     poll_connection::PollConnection,
-    types::{CompleteType, Flags, Header, Message, MessageType, Value},
+    types::{CompleteType, Message, Value},
 };
 
 fn session_connection() -> UnixStream {
@@ -26,42 +26,26 @@ fn session_connection() -> UnixStream {
 }
 
 fn hello() -> Message {
-    Message {
-        header: Header {
-            message_type: MessageType::MethodCall,
-            flags: Flags { byte: 0 },
-            serial: 0,
-            body_len: 0,
-        },
-        member: Some(String::from("Hello")),
+    Message::MethodCall {
+        serial: 0,
+        path: b"/org/freedesktop/DBus".to_vec(),
+        member: String::from("Hello"),
         interface: Some(String::from("org.freedesktop.DBus")),
-        path: Some(b"/org/freedesktop/DBus".to_vec()),
-        error_name: None,
-        reply_serial: None,
         destination: Some(String::from("org.freedesktop.DBus")),
         sender: None,
-        signature: None,
         unix_fds: None,
         body: vec![],
     }
 }
 
 fn show_notifiction() -> Message {
-    Message {
-        header: Header {
-            message_type: MessageType::MethodCall,
-            flags: Flags { byte: 0 },
-            serial: 0,
-            body_len: 0,
-        },
-        member: Some(String::from("Notify")),
+    Message::MethodCall {
+        serial: 0,
+        path: b"/org/freedesktop/Notifications".to_vec(),
+        member: String::from("Notify"),
         interface: Some(String::from("org.freedesktop.Notifications")),
-        path: Some(b"/org/freedesktop/Notifications".to_vec()),
-        error_name: None,
-        reply_serial: None,
         destination: Some(String::from("org.freedesktop.Notifications")),
         sender: None,
-        signature: None,
         unix_fds: None,
         body: vec![
             Value::String(String::from("")),
@@ -80,13 +64,10 @@ fn show_notifiction() -> Message {
             Value::Int32(1_000),
         ],
     }
-    .with_generated_signature()
 }
 
 #[allow(dead_code)]
 fn main_blocking() {
-    // println!("{:?}", show_notifiction());
-    // println!("{:?}", show_notifiction().with_generated_signature());
     let mut dbus = BlockingConnection::new(session_connection());
     let _guid = dbus.auth().unwrap();
     dbus.send_message(&mut hello()).unwrap();
@@ -172,7 +153,7 @@ fn test_encode_decode_hello() {
     let message = hello();
     let encoded = MessageEncoder::encode(&message).unwrap();
     let decoded = MessageDecoder::decode(&encoded).unwrap();
-    assert_eq!(message, decoded);
+    assert_eq!(decoded, hello());
 }
 
 #[test]
@@ -180,5 +161,5 @@ fn test_encode_decode_show_notification() {
     let message = show_notifiction();
     let encoded = MessageEncoder::encode(&message).unwrap();
     let decoded = MessageDecoder::decode(&encoded).unwrap();
-    assert_eq!(message, decoded);
+    assert_eq!(decoded, show_notifiction());
 }

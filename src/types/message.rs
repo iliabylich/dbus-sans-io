@@ -1,47 +1,154 @@
-use crate::types::{Header, Signature, Value};
+use crate::types::{MessageType, Value};
 
-#[derive(Default, PartialEq)]
-pub(crate) struct Message {
-    pub(crate) header: Header,
-
-    pub(crate) member: Option<String>,
-    pub(crate) interface: Option<String>,
-    pub(crate) path: Option<Vec<u8>>,
-    pub(crate) error_name: Option<String>,
-    pub(crate) reply_serial: Option<u32>,
-    pub(crate) destination: Option<String>,
-    pub(crate) sender: Option<String>,
-    pub(crate) signature: Option<Signature>,
-    pub(crate) unix_fds: Option<u32>,
-
-    pub(crate) body: Vec<Value>,
+#[derive(Debug, PartialEq)]
+pub(crate) enum Message {
+    MethodCall {
+        serial: u32,
+        path: Vec<u8>,
+        member: String,
+        interface: Option<String>,
+        destination: Option<String>,
+        sender: Option<String>,
+        unix_fds: Option<u32>,
+        body: Vec<Value>,
+    },
+    MethodReturn {
+        serial: u32,
+        reply_serial: u32,
+        destination: Option<String>,
+        sender: Option<String>,
+        unix_fds: Option<u32>,
+        body: Vec<Value>,
+    },
+    Error {
+        serial: u32,
+        error_name: String,
+        reply_serial: u32,
+        destination: Option<String>,
+        sender: Option<String>,
+        unix_fds: Option<u32>,
+        body: Vec<Value>,
+    },
+    Signal {
+        serial: u32,
+        path: Vec<u8>,
+        interface: String,
+        member: String,
+        destination: Option<String>,
+        sender: Option<String>,
+        unix_fds: Option<u32>,
+        body: Vec<Value>,
+    },
 }
 
 impl Message {
-    pub(crate) fn with_generated_signature(mut self) -> Self {
-        self.signature = Some(Signature {
-            items: self.body.iter().map(|item| item.complete_type()).collect(),
-        });
-        self
+    pub(crate) fn serial(&self) -> u32 {
+        match self {
+            Self::MethodCall { serial, .. }
+            | Self::MethodReturn { serial, .. }
+            | Self::Error { serial, .. }
+            | Self::Signal { serial, .. } => *serial,
+        }
     }
-}
 
-impl std::fmt::Debug for Message {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let path = self.path.as_ref().map(|path| String::from_utf8_lossy(path));
+    pub(crate) fn serial_mut(&mut self) -> &mut u32 {
+        match self {
+            Self::MethodCall { serial, .. }
+            | Self::MethodReturn { serial, .. }
+            | Self::Error { serial, .. }
+            | Self::Signal { serial, .. } => serial,
+        }
+    }
 
-        f.debug_struct("Message")
-            .field("header", &self.header)
-            .field("member", &self.member)
-            .field("interface", &self.interface)
-            .field("path", &path)
-            .field("error_name", &self.error_name)
-            .field("reply_serial", &self.reply_serial)
-            .field("destination", &self.destination)
-            .field("sender", &self.sender)
-            .field("signature", &self.signature)
-            .field("unix_fds", &self.unix_fds)
-            .field("body", &self.body)
-            .finish()
+    pub(crate) fn message_type(&self) -> MessageType {
+        match self {
+            Self::MethodCall { .. } => MessageType::MethodCall,
+            Self::MethodReturn { .. } => MessageType::MethodReturn,
+            Self::Error { .. } => MessageType::Error,
+            Self::Signal { .. } => MessageType::Signal,
+        }
+    }
+
+    pub(crate) fn path(&self) -> Option<&[u8]> {
+        match self {
+            Self::MethodCall { path, .. } | Self::Signal { path, .. } => Some(path),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn member(&self) -> Option<&str> {
+        match self {
+            Self::MethodCall { member, .. } | Self::Signal { member, .. } => Some(member),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn interface(&self) -> Option<&str> {
+        match self {
+            Self::MethodCall { interface, .. } => interface.as_deref(),
+            Self::Signal { interface, .. } => Some(interface),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn error_name(&self) -> Option<&str> {
+        match self {
+            Self::Error { error_name, .. } => Some(error_name),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn reply_serial(&self) -> Option<u32> {
+        match self {
+            Self::MethodReturn { reply_serial, .. } | Self::Error { reply_serial, .. } => {
+                Some(*reply_serial)
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn destination(&self) -> Option<&str> {
+        match self {
+            Self::MethodCall { destination, .. }
+            | Self::MethodReturn { destination, .. }
+            | Self::Error { destination, .. }
+            | Self::Signal { destination, .. } => destination.as_deref(),
+        }
+    }
+
+    pub(crate) fn sender(&self) -> Option<&str> {
+        match self {
+            Self::MethodCall { sender, .. }
+            | Self::MethodReturn { sender, .. }
+            | Self::Error { sender, .. }
+            | Self::Signal { sender, .. } => sender.as_deref(),
+        }
+    }
+
+    pub(crate) fn body(&self) -> &[Value] {
+        match self {
+            Self::MethodCall { body, .. }
+            | Self::MethodReturn { body, .. }
+            | Self::Error { body, .. }
+            | Self::Signal { body, .. } => body,
+        }
+    }
+
+    pub(crate) fn body_mut(&mut self) -> &mut Vec<Value> {
+        match self {
+            Self::MethodCall { body, .. }
+            | Self::MethodReturn { body, .. }
+            | Self::Error { body, .. }
+            | Self::Signal { body, .. } => body,
+        }
+    }
+
+    pub(crate) fn unix_fds(&self) -> Option<u32> {
+        match self {
+            Self::MethodCall { unix_fds, .. }
+            | Self::MethodReturn { unix_fds, .. }
+            | Self::Error { unix_fds, .. }
+            | Self::Signal { unix_fds, .. } => *unix_fds,
+        }
     }
 }

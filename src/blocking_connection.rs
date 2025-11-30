@@ -49,7 +49,8 @@ impl BlockingConnection {
     }
 
     pub(crate) fn send_message(&mut self, message: &mut Message) -> Result<()> {
-        message.header.serial = self.serial.increment_and_get();
+        *message.serial_mut() = self.serial.increment_and_get();
+
         self.writer.enqueue(&message)?;
 
         loop {

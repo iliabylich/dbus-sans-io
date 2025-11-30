@@ -24,7 +24,7 @@ pub(crate) enum Value {
 
 impl Value {
     pub(crate) fn new_non_empty_auto_array(items: Vec<Value>) -> Self {
-        let Some(first_item) = items.iter().next() else {
+        let Some(first_item) = items.get(0) else {
             panic!("an array must be non-empty");
         };
         let item_type = first_item.complete_type();
