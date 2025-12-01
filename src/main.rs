@@ -66,6 +66,22 @@ fn show_notifiction() -> Message {
     }
 }
 
+fn add_match(path: impl AsRef<str>) -> Message {
+    Message::MethodCall {
+        serial: 0,
+        path: b"/org/freedesktop/DBus".to_vec(),
+        member: "AddMatch".to_string(),
+        interface: Some(String::from("org.freedesktop.DBus")),
+        destination: Some(String::from("org.freedesktop.DBus")),
+        sender: None,
+        unix_fds: None,
+        body: vec![Value::String(format!(
+            "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='{}'",
+            path.as_ref()
+        ))],
+    }
+}
+
 #[allow(dead_code)]
 fn main_blocking() {
     let mut dbus = BlockingConnection::new(session_connection());
@@ -132,7 +148,9 @@ fn main_poll() {
                 match NameAcquired::try_from(message) {
                     Ok(name_acquired) => {
                         println!("{name_acquired:?}");
-                        dbus.enqueue(&mut show_notifiction()).unwrap();
+                        // dbus.enqueue(&mut show_notifiction()).unwrap();
+                        dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))
+                            .unwrap();
                     }
                     Err(message) => {
                         println!("Unknown: {:?}", message);
