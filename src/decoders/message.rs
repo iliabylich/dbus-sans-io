@@ -110,7 +110,7 @@ impl MessageDecoder {
 
 fn build_message(
     header: Header,
-    path: Option<Vec<u8>>,
+    path: Option<String>,
     interface: Option<String>,
     member: Option<String>,
     error_name: Option<String>,

@@ -1,48 +1,30 @@
-use crate::types::{Message, Value};
+use crate::{
+    messages::helpers::{body_is, interface_is, message_is, path_is},
+    types::{Message, Value},
+};
+use anyhow::Result;
 
 #[derive(Debug)]
 pub(crate) struct NameAcquired {
+    #[allow(dead_code)]
     pub(crate) name: String,
 }
 
-impl TryFrom<Message> for NameAcquired {
-    type Error = Message;
+impl NameAcquired {
+    pub(crate) fn try_parse(message: &Message) -> Result<Self> {
+        message_is!(
+            message,
+            Message::Signal {
+                path,
+                interface,
+                body,
+                ..
+            }
+        );
 
-    fn try_from(message: Message) -> Result<Self, Self::Error> {
-        macro_rules! message_type_is {
-            ($message:expr, $expected:ident) => {
-                if !matches!($message, Message::$expected { .. }) {
-                    return Err($message);
-                }
-            };
-        }
-        macro_rules! interface_is {
-            ($message:expr, $interface:expr) => {
-                if $message.interface() != Some($interface) {
-                    return Err($message);
-                }
-            };
-        }
-        macro_rules! path_is {
-            ($message:expr, $path:expr) => {
-                if $message.path() != Some($path) {
-                    return Err($message);
-                }
-            };
-        }
-
-        message_type_is!(message, Signal);
-        interface_is!(message, "org.freedesktop.DBus");
-        path_is!(message, b"/org/freedesktop/DBus");
-
-        let mut body = message.body().iter();
-
-        let Some(name) = body.next() else {
-            return Err(message);
-        };
-        let Value::String(name) = name else {
-            return Err(message);
-        };
+        interface_is!(interface, "org.freedesktop.DBus");
+        path_is!(path, "/org/freedesktop/DBus");
+        body_is!(body, [Value::String(name)]);
 
         Ok(Self { name: name.clone() })
     }

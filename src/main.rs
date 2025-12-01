@@ -12,9 +12,7 @@ mod types;
 
 use crate::{
     blocking_connection::BlockingConnection,
-    decoders::MessageDecoder,
-    encoders::MessageEncoder,
-    messages::NameAcquired,
+    messages::{NameAcquired, PropertiesChanged},
     poll_connection::PollConnection,
     types::{CompleteType, Message, Value},
 };
@@ -28,7 +26,7 @@ fn session_connection() -> UnixStream {
 fn hello() -> Message {
     Message::MethodCall {
         serial: 0,
-        path: b"/org/freedesktop/DBus".to_vec(),
+        path: String::from("/org/freedesktop/DBus"),
         member: String::from("Hello"),
         interface: Some(String::from("org.freedesktop.DBus")),
         destination: Some(String::from("org.freedesktop.DBus")),
@@ -41,7 +39,7 @@ fn hello() -> Message {
 fn show_notifiction() -> Message {
     Message::MethodCall {
         serial: 0,
-        path: b"/org/freedesktop/Notifications".to_vec(),
+        path: String::from("/org/freedesktop/Notifications"),
         member: String::from("Notify"),
         interface: Some(String::from("org.freedesktop.Notifications")),
         destination: Some(String::from("org.freedesktop.Notifications")),
@@ -69,7 +67,7 @@ fn show_notifiction() -> Message {
 fn add_match(path: impl AsRef<str>) -> Message {
     Message::MethodCall {
         serial: 0,
-        path: b"/org/freedesktop/DBus".to_vec(),
+        path: String::from("/org/freedesktop/DBus"),
         member: "AddMatch".to_string(),
         interface: Some(String::from("org.freedesktop.DBus")),
         destination: Some(String::from("org.freedesktop.DBus")),
@@ -82,25 +80,28 @@ fn add_match(path: impl AsRef<str>) -> Message {
     }
 }
 
+fn on_message(message: Message) {
+    if let Ok(name_acquired) = NameAcquired::try_parse(&message) {
+        println!("{name_acquired:?}");
+    } else if let Ok(properties_changed) = PropertiesChanged::try_parse(&message) {
+        println!("{properties_changed:?}");
+    } else {
+        println!("Unknown: {:?}", message);
+    }
+}
+
 #[allow(dead_code)]
 fn main_blocking() {
     let mut dbus = BlockingConnection::new(session_connection());
     let _guid = dbus.auth().unwrap();
     dbus.send_message(&mut hello()).unwrap();
+    dbus.send_message(&mut show_notifiction()).unwrap();
+    dbus.send_message(&mut add_match("/org/local/PipewireDBus"))
+        .unwrap();
 
     loop {
         let message = dbus.read_message().unwrap();
-
-        match NameAcquired::try_from(message) {
-            Ok(name_acquired) => {
-                println!("{name_acquired:?}");
-                dbus.send_message(&mut show_notifiction()).unwrap();
-                println!("notification sent");
-            }
-            Err(message) => {
-                println!("Received unknown {:?}", message);
-            }
-        }
+        on_message(message);
     }
 }
 
@@ -135,6 +136,9 @@ fn main_poll() {
         }
     }
     dbus.enqueue(&mut hello()).unwrap();
+    dbus.enqueue(&mut show_notifiction()).unwrap();
+    dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))
+        .unwrap();
     loop {
         fds[0].events = dbus.poll_read_write_events();
         let (readable, writable) = do_poll(&mut fds);
@@ -145,29 +149,20 @@ fn main_poll() {
 
         if readable {
             while let Some(message) = dbus.poll_read_one_message().unwrap() {
-                match NameAcquired::try_from(message) {
-                    Ok(name_acquired) => {
-                        println!("{name_acquired:?}");
-                        // dbus.enqueue(&mut show_notifiction()).unwrap();
-                        dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))
-                            .unwrap();
-                    }
-                    Err(message) => {
-                        println!("Unknown: {:?}", message);
-                    }
-                }
+                on_message(message);
             }
         }
     }
 }
 
 fn main() {
-    // main_blocking();
-    main_poll();
+    main_blocking();
+    // main_poll();
 }
 
 #[test]
 fn test_encode_decode_hello() {
+    use crate::{decoders::MessageDecoder, encoders::MessageEncoder};
     let message = hello();
     let encoded = MessageEncoder::encode(&message).unwrap();
     let decoded = MessageDecoder::decode(&encoded).unwrap();
@@ -176,6 +171,7 @@ fn test_encode_decode_hello() {
 
 #[test]
 fn test_encode_decode_show_notification() {
+    use crate::{decoders::MessageDecoder, encoders::MessageEncoder};
     let message = show_notifiction();
     let encoded = MessageEncoder::encode(&message).unwrap();
     let decoded = MessageDecoder::decode(&encoded).unwrap();

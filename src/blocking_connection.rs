@@ -51,7 +51,7 @@ impl BlockingConnection {
     pub(crate) fn send_message(&mut self, message: &mut Message) -> Result<()> {
         *message.serial_mut() = self.serial.increment_and_get();
 
-        self.writer.enqueue(&message)?;
+        self.writer.enqueue(message)?;
 
         loop {
             let Some(buf) = self.writer.wants_write() else {

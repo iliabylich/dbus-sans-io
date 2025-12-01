@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 
 pub(crate) struct DecodingBuffer<'a> {
     buf: &'a [u8],
@@ -122,7 +122,6 @@ impl<'a> DecodingBuffer<'a> {
 
     pub(crate) fn align(&mut self, align: usize) -> Result<()> {
         self.set_pos(self.pos.next_multiple_of(align));
-        ensure!(!self.is_eof());
         Ok(())
     }
 }

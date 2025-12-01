@@ -2,7 +2,7 @@ use crate::{
     decoders::{DecodingBuffer, SignatureDecoder},
     types::{CompleteType, Signature, Value},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub(crate) struct ValueDecoder;
 
@@ -57,11 +57,11 @@ impl ValueDecoder {
         Ok(s)
     }
 
-    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<Vec<u8>> {
+    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<String> {
         let len = Self::decode_u32(buf)? as usize;
         let path = buf.next_n(len)?.to_vec();
         buf.skip();
-        Ok(path)
+        String::from_utf8(path).context("non-utf8 path")
     }
 
     fn decode_complete_type(buf: &mut DecodingBuffer) -> Result<CompleteType> {
@@ -320,7 +320,7 @@ fn test_read_f64() {
 fn test_read_object_path() {
     let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
     buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_object_path(&mut buf).unwrap(), b"abcd");
+    assert_eq!(ValueDecoder::decode_object_path(&mut buf).unwrap(), "abcd");
     assert!(buf.is_eof())
 }
 

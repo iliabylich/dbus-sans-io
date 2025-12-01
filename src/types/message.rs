@@ -4,7 +4,7 @@ use crate::types::{MessageType, Value};
 pub(crate) enum Message {
     MethodCall {
         serial: u32,
-        path: Vec<u8>,
+        path: String,
         member: String,
         interface: Option<String>,
         destination: Option<String>,
@@ -31,7 +31,7 @@ pub(crate) enum Message {
     },
     Signal {
         serial: u32,
-        path: Vec<u8>,
+        path: String,
         interface: String,
         member: String,
         destination: Option<String>,
@@ -69,7 +69,7 @@ impl Message {
         }
     }
 
-    pub(crate) fn path(&self) -> Option<&[u8]> {
+    pub(crate) fn path(&self) -> Option<&str> {
         match self {
             Self::MethodCall { path, .. } | Self::Signal { path, .. } => Some(path),
             _ => None,
@@ -134,6 +134,7 @@ impl Message {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn body_mut(&mut self) -> &mut Vec<Value> {
         match self {
             Self::MethodCall { body, .. }

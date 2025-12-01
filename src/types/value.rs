@@ -1,6 +1,6 @@
 use crate::types::signature::CompleteType;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Value {
     Byte(u8),
     Bool(bool),
@@ -14,7 +14,7 @@ pub(crate) enum Value {
     UnixFD(u32),
 
     String(String),
-    ObjectPath(Vec<u8>),
+    ObjectPath(String),
     Signature(Vec<u8>),
     Struct(Vec<Value>),
     Array(CompleteType, Vec<Value>),
@@ -23,8 +23,9 @@ pub(crate) enum Value {
 }
 
 impl Value {
+    #[allow(dead_code)]
     pub(crate) fn new_non_empty_auto_array(items: Vec<Value>) -> Self {
-        let Some(first_item) = items.get(0) else {
+        let Some(first_item) = items.first() else {
             panic!("an array must be non-empty");
         };
         let item_type = first_item.complete_type();

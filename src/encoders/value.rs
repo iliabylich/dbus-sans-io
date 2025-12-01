@@ -55,9 +55,9 @@ impl ValueEncoder {
         buf.encode_u8(0);
     }
 
-    pub(crate) fn encode_object_path(buf: &mut EncodingBuffer, path: &[u8]) {
+    pub(crate) fn encode_object_path(buf: &mut EncodingBuffer, path: &str) {
         Self::encode_u32(buf, path.len() as u32);
-        buf.encode_bytes(path);
+        buf.encode_bytes(path.as_bytes());
         buf.encode_u8(0);
     }
 
@@ -251,7 +251,7 @@ fn test_encode_string() {
 fn test_encode_object_path() {
     let mut buf = EncodingBuffer::new();
     buf.encode_u8(0);
-    ValueEncoder::encode_object_path(&mut buf, b"abcd");
+    ValueEncoder::encode_object_path(&mut buf, "abcd");
     assert_eq!(buf.done(), b"\0\0\0\0\x04\x00\x00\x00abcd\0")
 }
 
