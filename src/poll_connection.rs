@@ -7,7 +7,6 @@ use crate::{
 use anyhow::Result;
 use libc::{POLLIN, POLLOUT};
 use std::{
-    collections::VecDeque,
     io::{ErrorKind, Read as _, Write as _},
     os::{fd::AsRawFd, unix::net::UnixStream},
 };
@@ -48,7 +47,7 @@ pub(crate) struct PollAuthFSM {
     stream: NonBlockingUnixStream,
     serial: Serial,
     auth: AuthFSM,
-    queue: VecDeque<Vec<u8>>,
+    queue: Vec<Vec<u8>>,
 }
 
 impl PollAuthFSM {
@@ -57,14 +56,14 @@ impl PollAuthFSM {
             stream,
             serial: Serial::zero(),
             auth: AuthFSM::new(),
-            queue: VecDeque::new(),
+            queue: Vec::new(),
         }
     }
 
     fn enqueue(&mut self, message: &mut Message) -> Result<()> {
         *message.serial_mut() = self.serial.increment_and_get();
         let buf = MessageEncoder::encode(message)?;
-        self.queue.push_back(buf);
+        self.queue.push(buf);
         Ok(())
     }
 
@@ -115,7 +114,7 @@ pub(crate) struct PollReaderWriterFSM {
 }
 
 impl PollReaderWriterFSM {
-    fn new(stream: NonBlockingUnixStream, serial: Serial, queue: VecDeque<Vec<u8>>) -> Self {
+    fn new(stream: NonBlockingUnixStream, serial: Serial, queue: Vec<Vec<u8>>) -> Self {
         let mut writer = WriterFSM::new();
         for buf in queue {
             writer.enqueue_serialized(buf);

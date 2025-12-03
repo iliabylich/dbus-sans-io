@@ -1,4 +1,5 @@
 use crate::{
+    encoders::MessageEncoder,
     fsm::{AuthFSM, AuthWants, ConnectFSM, ConnectWants, ReaderFSM, WriterFSM},
     serial::Serial,
     types::{GUID, Message},
@@ -15,13 +16,24 @@ const WRITE_USER_DATA: u64 = 4;
 #[derive(Debug)]
 pub(crate) struct IoUringConnector {
     connect: ConnectFSM,
+    serial: Serial,
+    queue: Vec<Vec<u8>>,
 }
 
 impl IoUringConnector {
     pub(crate) fn new() -> Self {
         Self {
             connect: ConnectFSM::new(),
+            serial: Serial::zero(),
+            queue: vec![],
         }
+    }
+
+    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+        *message.serial_mut() = self.serial.increment_and_get();
+        let buf = MessageEncoder::encode(message)?;
+        self.queue.push(buf);
+        Ok(())
     }
 
     pub(crate) fn next_sqe(&mut self) -> Sqe {
@@ -58,15 +70,26 @@ impl IoUringConnector {
 
 pub(crate) struct IoUringAuth {
     fd: i32,
+    serial: Serial,
+    queue: Vec<Vec<u8>>,
     auth: AuthFSM,
 }
 
 impl IoUringAuth {
-    pub(crate) fn new(fd: i32) -> Self {
+    pub(crate) fn new(fd: i32, serial: Serial, queue: Vec<Vec<u8>>) -> Self {
         Self {
             fd,
+            serial,
+            queue,
             auth: AuthFSM::new(),
         }
+    }
+
+    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+        *message.serial_mut() = self.serial.increment_and_get();
+        let buf = MessageEncoder::encode(message)?;
+        self.queue.push(buf);
+        Ok(())
     }
 
     pub(crate) fn next_sqe(&mut self) -> Sqe {
@@ -104,14 +127,6 @@ impl IoUringAuth {
 }
 
 #[derive(Debug)]
-pub(crate) struct IoUringConnection {
-    fd: i32,
-    serial: Serial,
-    reader: BufferedReaderFSM,
-    writer: WriterFSM,
-}
-
-#[derive(Debug)]
 struct BufferedReaderFSM {
     reader: ReaderFSM,
     last: *mut u8,
@@ -139,13 +154,26 @@ impl BufferedReaderFSM {
     }
 }
 
-impl IoUringConnection {
-    pub(crate) fn new(fd: i32) -> Self {
+#[derive(Debug)]
+pub(crate) struct IoUringReaderWriter {
+    fd: i32,
+    serial: Serial,
+    reader: BufferedReaderFSM,
+    writer: WriterFSM,
+}
+
+impl IoUringReaderWriter {
+    pub(crate) fn new(fd: i32, serial: Serial, queue: Vec<Vec<u8>>) -> Self {
+        let mut writer = WriterFSM::new();
+        for buf in queue {
+            writer.enqueue_serialized(buf);
+        }
+
         Self {
             fd,
-            serial: Serial::zero(),
+            serial,
             reader: BufferedReaderFSM::new(),
-            writer: WriterFSM::new(),
+            writer,
         }
     }
 
@@ -219,4 +247,77 @@ fn read_sqe(fd: i32, buf: &mut [u8]) -> Sqe {
     opcode::Read::new(types::Fd(fd), buf.as_mut_ptr(), buf.len() as u32)
         .build()
         .user_data(READ_USER_DATA)
+}
+
+#[derive(Default)]
+pub(crate) enum IoUringConnection {
+    #[default]
+    None,
+
+    Connecting(IoUringConnector),
+    Auth(IoUringAuth),
+    ReaderWriter(IoUringReaderWriter),
+}
+
+impl IoUringConnection {
+    pub(crate) fn new() -> Self {
+        Self::Connecting(IoUringConnector::new())
+    }
+
+    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+        match self {
+            Self::Connecting(connector) => connector.enqueue(message),
+            Self::Auth(auth) => auth.enqueue(message),
+            Self::ReaderWriter(rw) => rw.enqueue(message),
+
+            Self::None => unreachable!(),
+        }
+    }
+
+    pub(crate) fn next_sqe(&mut self) -> Option<Sqe> {
+        match self {
+            Self::Connecting(connector) => Some(connector.next_sqe()),
+            Self::Auth(auth) => Some(auth.next_sqe()),
+            Self::ReaderWriter(reader_writer) => reader_writer.next_sqe(),
+
+            Self::None => unreachable!(),
+        }
+    }
+
+    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Option<Message> {
+        match self {
+            Self::Connecting(connector) => match connector.process_cqe(cqe) {
+                Some(fd) => {
+                    let Self::Connecting(IoUringConnector { serial, queue, .. }) =
+                        std::mem::take(self)
+                    else {
+                        unreachable!()
+                    };
+
+                    *self = Self::Auth(IoUringAuth::new(fd, serial, queue));
+                    None
+                }
+                None => None,
+            },
+
+            Self::Auth(auth) => match auth.process_cqe(cqe) {
+                Some(guid) => {
+                    println!("GUID: {guid:?}");
+                    let Self::Auth(IoUringAuth {
+                        fd, serial, queue, ..
+                    }) = std::mem::take(self)
+                    else {
+                        unreachable!()
+                    };
+                    *self = Self::ReaderWriter(IoUringReaderWriter::new(fd, serial, queue));
+                    None
+                }
+                None => None,
+            },
+
+            Self::ReaderWriter(reader_writer) => reader_writer.process_cqe(cqe),
+
+            Self::None => unreachable!(),
+        }
+    }
 }
