@@ -6,7 +6,7 @@ use crate::{
 use anyhow::Result;
 use std::{
     io::{Read as _, Write as _},
-    os::unix::net::UnixStream,
+    os::{fd::FromRawFd, unix::net::UnixStream},
 };
 
 pub(crate) struct BlockingConnection {
@@ -24,6 +24,18 @@ impl BlockingConnection {
             stream,
             serial: Serial::zero(),
 
+            auth: AuthFSM::new(),
+            reader: ReaderFSM::new(),
+            writer: WriterFSM::new(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_fd(fd: i32) -> Self {
+        Self {
+            stream: unsafe { UnixStream::from_raw_fd(fd) },
+
+            serial: Serial::zero(),
             auth: AuthFSM::new(),
             reader: ReaderFSM::new(),
             writer: WriterFSM::new(),
@@ -54,7 +66,7 @@ impl BlockingConnection {
         self.writer.enqueue(message)?;
 
         loop {
-            let Some(buf) = self.writer.wants_write() else {
+            let Some(buf) = self.writer.wants() else {
                 break;
             };
             let len = self.stream.write(buf)?;
@@ -66,7 +78,7 @@ impl BlockingConnection {
 
     pub(crate) fn read_message(&mut self) -> Result<Message> {
         loop {
-            let buf = self.reader.wants_read();
+            let buf = self.reader.wants();
             let len = self.stream.read(buf)?;
             if let Some(message) = self.reader.satisfy(len)? {
                 return Ok(message);

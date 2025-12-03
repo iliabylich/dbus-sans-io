@@ -118,7 +118,7 @@ impl PollConnection {
 
     pub(crate) fn poll_read_write_events(&mut self) -> i16 {
         let mut out = POLLIN;
-        if self.writer.wants_write().is_some() {
+        if self.writer.wants().is_some() {
             out |= POLLOUT;
         }
         out
@@ -126,7 +126,7 @@ impl PollConnection {
 
     pub(crate) fn poll_read_one_message(&mut self) -> Result<Option<Message>> {
         loop {
-            let buf = self.reader.wants_read();
+            let buf = self.reader.wants();
             let Some(len) = self.stream.read(buf)? else {
                 return Ok(None);
             };
@@ -139,7 +139,7 @@ impl PollConnection {
 
     pub(crate) fn poll_write_to_end(&mut self) -> Result<()> {
         loop {
-            let Some(buf) = self.writer.wants_write() else {
+            let Some(buf) = self.writer.wants() else {
                 break;
             };
             let Some(len) = self.stream.write(buf)? else {

@@ -9,3 +9,6 @@ pub(crate) use read_buffer::ReadBuffer;
 
 mod writer;
 pub(crate) use writer::WriterFSM;
+
+mod connect;
+pub(crate) use connect::{ConnectFSM, ConnectWants};

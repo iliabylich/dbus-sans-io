@@ -26,7 +26,7 @@ impl WriterFSM {
         Ok(())
     }
 
-    pub(crate) fn wants_write(&self) -> Option<&[u8]> {
+    pub(crate) fn wants(&self) -> Option<&[u8]> {
         let QueueItem { pos, buf } = self.queue.front()?;
         Some(&buf[*pos..])
     }

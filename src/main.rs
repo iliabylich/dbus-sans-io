@@ -1,10 +1,10 @@
-use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
 use std::os::{fd::AsRawFd, unix::net::UnixStream};
 
 mod blocking_connection;
 mod decoders;
 mod encoders;
 mod fsm;
+mod io_uring_connection;
 mod messages;
 mod poll_connection;
 mod serial;
@@ -12,6 +12,7 @@ mod types;
 
 use crate::{
     blocking_connection::BlockingConnection,
+    io_uring_connection::{IoUringAuth, IoUringConnection, IoUringConnector},
     messages::{NameAcquired, PropertiesChanged},
     poll_connection::PollConnection,
     types::{CompleteType, Message, Value},
@@ -107,6 +108,7 @@ fn main_blocking() {
 
 #[allow(dead_code)]
 fn main_poll() {
+    use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
     let mut dbus = PollConnection::new(session_connection());
 
     let mut fds = [pollfd {
@@ -155,9 +157,68 @@ fn main_poll() {
     }
 }
 
+#[allow(dead_code)]
+fn main_io_uring() {
+    use io_uring::IoUring;
+
+    let mut ring = IoUring::new(10).unwrap();
+
+    let mut connector = IoUringConnector::new();
+    let fd = loop {
+        let sqe = connector.next_sqe();
+        unsafe { ring.submission().push(&sqe).unwrap() };
+
+        let ready = ring.submit_and_wait(1).unwrap();
+        assert_eq!(ready, 1);
+
+        let cqe = ring.completion().next().expect("must be 1 item");
+        if let Some(fd) = connector.process_cqe(cqe) {
+            break fd;
+        }
+    };
+
+    let mut auth = IoUringAuth::new(fd);
+    loop {
+        let sqe = auth.next_sqe();
+        unsafe { ring.submission().push(&sqe).unwrap() };
+
+        let ready = ring.submit_and_wait(1).unwrap();
+        assert_eq!(ready, 1);
+
+        let cqe = ring.completion().next().expect("must be 1 item");
+        if let Some(guid) = auth.process_cqe(cqe) {
+            println!("GUID: {guid:?}");
+            break;
+        }
+    }
+
+    let mut conn = IoUringConnection::new(fd);
+
+    conn.enqueue(&mut hello()).unwrap();
+    conn.enqueue(&mut show_notifiction()).unwrap();
+    conn.enqueue(&mut add_match("/org/local/PipewireDBus"))
+        .unwrap();
+
+    loop {
+        if let Some(sqe) = conn.next_sqe() {
+            unsafe { ring.submission().push(&sqe).unwrap() };
+        }
+
+        ring.submit_and_wait(1).unwrap();
+        ring.completion().sync();
+
+        while let Some(cqe) = ring.completion().next() {
+            if let Some(message) = conn.process_cqe(cqe) {
+                on_message(message);
+            }
+        }
+    }
+}
+
 fn main() {
-    main_blocking();
+    // main_blocking();
     // main_poll();
+    main_io_uring();
 }
 
 #[test]

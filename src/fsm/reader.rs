@@ -25,7 +25,7 @@ impl ReaderFSM {
         }
     }
 
-    pub(crate) fn wants_read(&mut self) -> &mut [u8] {
+    pub(crate) fn wants(&mut self) -> &mut [u8] {
         self.buf.remaining_part_mut()
     }
 

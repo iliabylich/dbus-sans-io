@@ -1,5 +1,6 @@
 use std::cell::Cell;
 
+#[derive(Debug)]
 pub(crate) struct Serial {
     counter: Cell<u32>,
 }
