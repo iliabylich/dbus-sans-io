@@ -1,14 +1,15 @@
+use crate::{
+    encoders::MessageEncoder,
+    fsm::{AuthFSM, AuthWants, AuthWantsTag, ReaderFSM, WriterFSM},
+    serial::Serial,
+    types::Message,
+};
 use anyhow::Result;
 use libc::{POLLIN, POLLOUT};
 use std::{
+    collections::VecDeque,
     io::{ErrorKind, Read as _, Write as _},
     os::{fd::AsRawFd, unix::net::UnixStream},
-};
-
-use crate::{
-    fsm::{AuthFSM, AuthWants, ReaderFSM, WriterFSM},
-    serial::Serial,
-    types::{GUID, Message},
 };
 
 struct NonBlockingUnixStream {
@@ -43,69 +44,58 @@ impl AsRawFd for NonBlockingUnixStream {
     }
 }
 
-pub(crate) struct PollConnection {
+pub(crate) struct PollAuthFSM {
     stream: NonBlockingUnixStream,
     serial: Serial,
-
     auth: AuthFSM,
-    reader: ReaderFSM,
-    writer: WriterFSM,
+    queue: VecDeque<Vec<u8>>,
 }
 
-impl AsRawFd for PollConnection {
-    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.stream.as_raw_fd()
-    }
-}
-
-impl PollConnection {
-    pub(crate) fn new(stream: UnixStream) -> Self {
-        stream.set_nonblocking(true).unwrap();
-
+impl PollAuthFSM {
+    fn new(stream: NonBlockingUnixStream) -> Self {
         Self {
-            stream: NonBlockingUnixStream::new(stream),
+            stream,
             serial: Serial::zero(),
-
             auth: AuthFSM::new(),
-            reader: ReaderFSM::new(),
-            writer: WriterFSM::new(),
+            queue: VecDeque::new(),
         }
     }
 
-    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+    fn enqueue(&mut self, message: &mut Message) -> Result<()> {
         *message.serial_mut() = self.serial.increment_and_get();
-
-        self.writer.enqueue(message)?;
+        let buf = MessageEncoder::encode(message)?;
+        self.queue.push_back(buf);
         Ok(())
     }
 
-    pub(crate) fn poll_auth_events(&mut self) -> i16 {
-        match self.auth.wants() {
-            AuthWants::Read(_) => POLLIN,
-            AuthWants::Write(_) => POLLOUT,
+    fn events(&self) -> i16 {
+        match self.auth.wants_tag() {
+            AuthWantsTag::Read => POLLIN,
+            AuthWantsTag::Write => POLLOUT,
         }
     }
 
-    pub(crate) fn poll_auth(&mut self, readable: bool, writable: bool) -> Result<Option<GUID>> {
+    fn poll(&mut self, readable: bool, writable: bool) -> Result<bool> {
         loop {
             let mut did = false;
 
             if writable
                 && let AuthWants::Write(buf) = self.auth.wants()
-                && let Some(len) = self.stream.write(buf)?
+                && let Some(written) = self.stream.write(buf)?
             {
                 did = true;
-                if let Some(guid) = self.auth.satisfy_write(len)? {
-                    return Ok(Some(guid));
+                if let Some(guid) = self.auth.satisfy_write(written)? {
+                    println!("GUID: {guid:?}");
+                    return Ok(true);
                 }
             }
 
             if readable
                 && let AuthWants::Read(buf) = self.auth.wants()
-                && let Some(len) = self.stream.read(buf)?
+                && let Some(read) = self.stream.read(buf)?
             {
                 did = true;
-                self.auth.satisfy_read(len)?;
+                self.auth.satisfy_read(read)?;
             }
 
             if !did {
@@ -113,10 +103,38 @@ impl PollConnection {
             }
         }
 
-        Ok(None)
+        Ok(false)
+    }
+}
+
+pub(crate) struct PollReaderWriterFSM {
+    stream: NonBlockingUnixStream,
+    serial: Serial,
+    reader: ReaderFSM,
+    writer: WriterFSM,
+}
+
+impl PollReaderWriterFSM {
+    fn new(stream: NonBlockingUnixStream, serial: Serial, queue: VecDeque<Vec<u8>>) -> Self {
+        let mut writer = WriterFSM::new();
+        for buf in queue {
+            writer.enqueue_serialized(buf);
+        }
+        Self {
+            stream,
+            serial,
+            reader: ReaderFSM::new(),
+            writer,
+        }
     }
 
-    pub(crate) fn poll_read_write_events(&mut self) -> i16 {
+    fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+        *message.serial_mut() = self.serial.increment_and_get();
+        self.writer.enqueue(message)?;
+        Ok(())
+    }
+
+    fn events(&self) -> i16 {
         let mut out = POLLIN;
         if self.writer.wants().is_some() {
             out |= POLLOUT;
@@ -124,29 +142,105 @@ impl PollConnection {
         out
     }
 
-    pub(crate) fn poll_read_one_message(&mut self) -> Result<Option<Message>> {
-        loop {
-            let buf = self.reader.wants();
-            let Some(len) = self.stream.read(buf)? else {
-                return Ok(None);
-            };
-
-            if let Some(message) = self.reader.satisfy(len)? {
-                return Ok(Some(message));
+    fn poll(&mut self, readable: bool, writable: bool) -> Result<Vec<Message>> {
+        if writable {
+            loop {
+                let Some(buf) = self.writer.wants() else {
+                    break;
+                };
+                let Some(len) = self.stream.write(buf)? else {
+                    break;
+                };
+                self.writer.satisfy(len)?;
             }
+        }
+
+        if readable {
+            let mut messages = vec![];
+
+            loop {
+                let buf = self.reader.wants();
+                let Some(len) = self.stream.read(buf)? else {
+                    return Ok(messages);
+                };
+
+                if let Some(message) = self.reader.satisfy(len)? {
+                    messages.push(message);
+                }
+            }
+        }
+
+        Ok(vec![])
+    }
+}
+
+#[derive(Default)]
+pub(crate) enum PollConnection {
+    #[default]
+    None,
+    Auth(PollAuthFSM),
+    ReaderWriter(PollReaderWriterFSM),
+}
+
+impl AsRawFd for PollConnection {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        match self {
+            Self::Auth(PollAuthFSM { stream, .. })
+            | Self::ReaderWriter(PollReaderWriterFSM { stream, .. }) => stream.as_raw_fd(),
+
+            Self::None => unreachable!(),
+        }
+    }
+}
+
+impl PollConnection {
+    pub(crate) fn new(stream: UnixStream) -> Self {
+        stream.set_nonblocking(true).unwrap();
+
+        Self::Auth(PollAuthFSM::new(NonBlockingUnixStream::new(stream)))
+    }
+
+    pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {
+        match self {
+            Self::Auth(auth) => auth.enqueue(message),
+            Self::ReaderWriter(rw) => rw.enqueue(message),
+
+            Self::None => unreachable!(),
         }
     }
 
-    pub(crate) fn poll_write_to_end(&mut self) -> Result<()> {
-        loop {
-            let Some(buf) = self.writer.wants() else {
-                break;
-            };
-            let Some(len) = self.stream.write(buf)? else {
-                break;
-            };
-            self.writer.satisfy(len)?;
+    pub(crate) fn events(&self) -> i16 {
+        match self {
+            Self::Auth(auth) => auth.events(),
+            Self::ReaderWriter(rw) => rw.events(),
+
+            Self::None => unreachable!(),
         }
-        Ok(())
+    }
+
+    pub(crate) fn poll(&mut self, readable: bool, writable: bool) -> Result<Vec<Message>> {
+        match self {
+            Self::Auth(auth) => {
+                if auth.poll(readable, writable)? {
+                    // EOA
+                    let Self::Auth(PollAuthFSM {
+                        stream,
+                        serial,
+                        queue,
+                        ..
+                    }) = std::mem::take(self)
+                    else {
+                        unreachable!()
+                    };
+
+                    *self = Self::ReaderWriter(PollReaderWriterFSM::new(stream, serial, queue));
+                }
+
+                Ok(vec![])
+            }
+            Self::ReaderWriter(rw) => rw.poll(readable, writable),
+
+            Self::None => unreachable!(),
+        }
     }
 }

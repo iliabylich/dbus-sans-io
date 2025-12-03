@@ -1,5 +1,5 @@
 mod auth;
-pub(crate) use auth::{AuthFSM, AuthWants};
+pub(crate) use auth::{AuthFSM, AuthWants, AuthWantsTag};
 
 mod reader;
 pub(crate) use reader::ReaderFSM;

@@ -21,9 +21,26 @@ pub(crate) enum AuthWants<'a> {
     Write(&'a [u8]),
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AuthWantsTag {
+    Read,
+    Write,
+}
+
 impl AuthFSM {
     pub(crate) fn new() -> Self {
         Self::WritingZero
+    }
+
+    pub(crate) fn wants_tag(&self) -> AuthWantsTag {
+        match self {
+            Self::WritingZero
+            | Self::WritingAuthExternal { .. }
+            | Self::WritingData { .. }
+            | Self::WritingBegin { .. } => AuthWantsTag::Write,
+
+            Self::ReadingData { .. } | Self::ReadingGUID { .. } => AuthWantsTag::Read,
+        }
     }
 
     pub(crate) fn wants(&mut self) -> AuthWants<'_> {

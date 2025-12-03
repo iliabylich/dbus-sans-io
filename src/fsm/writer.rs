@@ -22,8 +22,12 @@ impl WriterFSM {
 
     pub(crate) fn enqueue(&mut self, message: &Message) -> Result<()> {
         let buf = MessageEncoder::encode(message)?;
-        self.queue.push_back(QueueItem { pos: 0, buf });
+        self.enqueue_serialized(buf);
         Ok(())
+    }
+
+    pub(crate) fn enqueue_serialized(&mut self, buf: Vec<u8>) {
+        self.queue.push_back(QueueItem { pos: 0, buf });
     }
 
     pub(crate) fn wants(&self) -> Option<&[u8]> {

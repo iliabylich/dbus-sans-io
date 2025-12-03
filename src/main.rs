@@ -128,31 +128,17 @@ fn main_poll() {
         (readable, writable)
     }
 
-    loop {
-        fds[0].events = dbus.poll_auth_events();
-        let (readable, writable) = do_poll(&mut fds);
-
-        if let Some(guid) = dbus.poll_auth(readable, writable).unwrap() {
-            println!("GUID: {}", guid.as_str().unwrap());
-            break;
-        }
-    }
     dbus.enqueue(&mut hello()).unwrap();
     dbus.enqueue(&mut show_notifiction()).unwrap();
     dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))
         .unwrap();
+
     loop {
-        fds[0].events = dbus.poll_read_write_events();
+        fds[0].events = dbus.events();
         let (readable, writable) = do_poll(&mut fds);
 
-        if writable {
-            dbus.poll_write_to_end().unwrap();
-        }
-
-        if readable {
-            while let Some(message) = dbus.poll_read_one_message().unwrap() {
-                on_message(message);
-            }
+        for message in dbus.poll(readable, writable).unwrap() {
+            on_message(message);
         }
     }
 }
@@ -217,8 +203,8 @@ fn main_io_uring() {
 
 fn main() {
     // main_blocking();
-    // main_poll();
-    main_io_uring();
+    main_poll();
+    // main_io_uring();
 }
 
 #[test]
