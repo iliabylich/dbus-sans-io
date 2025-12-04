@@ -10,6 +10,8 @@ mod poll_connection;
 mod serial;
 mod types;
 
+use anyhow::Result;
+
 use crate::{
     blocking_connection::BlockingConnection,
     io_uring_connection::IoUringConnection,
@@ -82,24 +84,23 @@ fn on_message(message: Message) -> Vec<Message> {
 }
 
 #[allow(dead_code)]
-fn main_blocking() {
+fn main_blocking() -> Result<()> {
     let mut dbus = BlockingConnection::new(session_connection());
-    let _guid = dbus.auth().unwrap();
-    dbus.send_message(&mut hello()).unwrap();
-    dbus.send_message(&mut show_notifiction()).unwrap();
-    dbus.send_message(&mut add_match("/org/local/PipewireDBus"))
-        .unwrap();
+    let _guid = dbus.auth()?;
+    dbus.send_message(&mut hello())?;
+    dbus.send_message(&mut show_notifiction())?;
+    dbus.send_message(&mut add_match("/org/local/PipewireDBus"))?;
 
     loop {
-        let message = dbus.read_message().unwrap();
+        let message = dbus.read_message()?;
         on_message(message);
     }
 }
 
 #[allow(dead_code)]
-fn main_poll() {
+fn main_poll() -> Result<()> {
     use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
-    let mut dbus = PollConnection::new(session_connection());
+    let mut dbus = PollConnection::new(session_connection())?;
 
     let mut fds = [pollfd {
         fd: dbus.as_raw_fd(),
@@ -118,16 +119,15 @@ fn main_poll() {
         (readable, writable)
     }
 
-    dbus.enqueue(&mut hello()).unwrap();
-    dbus.enqueue(&mut show_notifiction()).unwrap();
-    dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))
-        .unwrap();
+    dbus.enqueue(&mut hello())?;
+    dbus.enqueue(&mut show_notifiction())?;
+    dbus.enqueue(&mut add_match("/org/local/PipewireDBus"))?;
 
     loop {
         fds[0].events = dbus.events();
         let (readable, writable) = do_poll(&mut fds);
 
-        for message in dbus.poll(readable, writable).unwrap() {
+        for message in dbus.poll(readable, writable)? {
             on_message(message);
         }
     }
@@ -147,43 +147,42 @@ const INTROSPECTION: &str = r#"
 "#;
 
 #[allow(dead_code)]
-fn main_io_uring() {
+fn main_io_uring() -> Result<()> {
     use io_uring::IoUring;
 
-    let mut ring = IoUring::new(10).unwrap();
+    let mut ring = IoUring::new(10)?;
 
     let mut conn = IoUringConnection::new();
 
-    conn.enqueue(&mut hello()).unwrap();
-    conn.enqueue(&mut show_notifiction()).unwrap();
-    conn.enqueue(&mut add_match("/org/local/PipewireDBus"))
-        .unwrap();
-    conn.enqueue(&mut RequestName::new("org.me.test").into_message())
-        .unwrap();
+    conn.enqueue(&mut hello())?;
+    conn.enqueue(&mut show_notifiction())?;
+    conn.enqueue(&mut add_match("/org/local/PipewireDBus"))?;
+    conn.enqueue(&mut RequestName::new("org.me.test").into_message())?;
 
     loop {
         if let Some(sqe) = conn.next_sqe() {
-            unsafe { ring.submission().push(&sqe).unwrap() };
+            unsafe { ring.submission().push(&sqe)? };
         }
 
-        ring.submit_and_wait(1).unwrap();
+        ring.submit_and_wait(1)?;
 
         while let Some(cqe) = ring.completion().next() {
-            if let Some(message) = conn.process_cqe(cqe) {
+            if let Some(message) = conn.process_cqe(cqe)? {
                 let replies = on_message(message);
                 for mut reply in replies {
                     println!("Replying with {reply:?}");
-                    conn.enqueue(&mut reply).unwrap();
+                    conn.enqueue(&mut reply)?;
                 }
             }
         }
     }
 }
 
-fn main() {
-    // main_blocking();
-    // main_poll();
-    main_io_uring();
+fn main() -> Result<()> {
+    // main_blocking()?;
+    // main_poll()?;
+    main_io_uring()?;
+    Ok(())
 }
 
 #[test]

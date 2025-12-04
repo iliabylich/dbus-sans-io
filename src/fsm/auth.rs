@@ -136,44 +136,49 @@ impl AuthFSM {
     }
 }
 
-#[test]
-fn test_auth_fsm() {
-    let mut fsm = AuthFSM::new();
-    assert_eq!(fsm.wants(), AuthWants::Write(b"\0"));
-    fsm.satisfy_write(1).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::{AUTH_EXTERNAL, AuthFSM, AuthWants, BEGIN, DATA};
 
-    assert_eq!(fsm.wants(), AuthWants::Write(AUTH_EXTERNAL));
-    fsm.satisfy_write(AUTH_EXTERNAL.len()).unwrap();
+    #[test]
+    fn test_auth_fsm() {
+        let mut fsm = AuthFSM::new();
+        assert_eq!(fsm.wants(), AuthWants::Write(b"\0"));
+        fsm.satisfy_write(1).unwrap();
 
-    let AuthWants::Read(buffer) = fsm.wants() else {
-        panic!("wrong next action");
-    };
-    let chunk = b"DAT";
-    buffer[..chunk.len()].copy_from_slice(chunk);
-    fsm.satisfy_read(chunk.len()).unwrap();
+        assert_eq!(fsm.wants(), AuthWants::Write(AUTH_EXTERNAL));
+        fsm.satisfy_write(AUTH_EXTERNAL.len()).unwrap();
 
-    let AuthWants::Read(buffer) = fsm.wants() else {
-        panic!("wrong next action");
-    };
-    let chunk = b"A\r\n";
-    buffer[..chunk.len()].copy_from_slice(chunk);
-    fsm.satisfy_read(chunk.len()).unwrap();
+        let AuthWants::Read(buffer) = fsm.wants() else {
+            panic!("wrong next action");
+        };
+        let chunk = b"DAT";
+        buffer[..chunk.len()].copy_from_slice(chunk);
+        fsm.satisfy_read(chunk.len()).unwrap();
 
-    assert_eq!(fsm.wants(), AuthWants::Write(DATA));
-    fsm.satisfy_write(3).unwrap();
+        let AuthWants::Read(buffer) = fsm.wants() else {
+            panic!("wrong next action");
+        };
+        let chunk = b"A\r\n";
+        buffer[..chunk.len()].copy_from_slice(chunk);
+        fsm.satisfy_read(chunk.len()).unwrap();
 
-    assert_eq!(fsm.wants(), AuthWants::Write(b"A\r\n"));
-    fsm.satisfy_write(3).unwrap();
+        assert_eq!(fsm.wants(), AuthWants::Write(DATA));
+        fsm.satisfy_write(3).unwrap();
 
-    let AuthWants::Read(buffer) = fsm.wants() else {
-        panic!("wrong next action");
-    };
-    let guid = b"OK a97099b37b54cdc2a686559c6922fdeb\r\n";
-    buffer.copy_from_slice(guid);
-    fsm.satisfy_read(guid.len()).unwrap();
+        assert_eq!(fsm.wants(), AuthWants::Write(b"A\r\n"));
+        fsm.satisfy_write(3).unwrap();
 
-    assert_eq!(fsm.wants(), AuthWants::Write(BEGIN));
-    let guid = fsm.satisfy_write(BEGIN.len()).unwrap().unwrap();
+        let AuthWants::Read(buffer) = fsm.wants() else {
+            panic!("wrong next action");
+        };
+        let guid = b"OK a97099b37b54cdc2a686559c6922fdeb\r\n";
+        buffer.copy_from_slice(guid);
+        fsm.satisfy_read(guid.len()).unwrap();
 
-    assert_eq!(guid.as_str().unwrap(), "a97099b37b54cdc2a686559c6922fdeb");
+        assert_eq!(fsm.wants(), AuthWants::Write(BEGIN));
+        let guid = fsm.satisfy_write(BEGIN.len()).unwrap().unwrap();
+
+        assert_eq!(guid.as_str().unwrap(), "a97099b37b54cdc2a686559c6922fdeb");
+    }
 }

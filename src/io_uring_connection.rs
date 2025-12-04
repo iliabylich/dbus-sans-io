@@ -37,34 +37,29 @@ impl IoUringConnector {
     }
 
     pub(crate) fn next_sqe(&mut self) -> Sqe {
-        match self
-            .connect
-            .wants()
-            .expect("IoUringConnector is Done, did you forget to feed it with last CQE entry?")
-        {
+        match self.connect.wants() {
             ConnectWants::Socket => socket_sqe(),
             ConnectWants::Connect { fd, addr } => connect_sqe(fd, addr),
         }
     }
 
-    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Option<i32> {
+    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<i32>> {
         match cqe.user_data() {
             SOCKET_USER_DATA => {
                 let fd = cqe.result();
                 assert!(fd > 0);
-                self.connect.satisfy_socket(fd);
+                self.connect.satisfy_socket(fd)?;
+                Ok(None)
             }
 
             CONNECT_USER_DATA => {
                 assert!(cqe.result() >= 0);
-                self.connect.satisfy_connect();
-                return self.connect.fd();
+                let fd = self.connect.satisfy_connect();
+                Ok(Some(fd))
             }
 
-            _ => {}
+            _ => Ok(None),
         }
-
-        None
     }
 }
 
@@ -99,16 +94,17 @@ impl IoUringAuth {
         }
     }
 
-    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Option<GUID> {
+    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<GUID>> {
         match cqe.user_data() {
             WRITE_USER_DATA => {
                 let written = cqe.result();
                 assert!(written >= 0);
                 let written = written as usize;
 
-                if let Some(guid) = self.auth.satisfy_write(written).unwrap() {
-                    return Some(guid);
+                if let Some(guid) = self.auth.satisfy_write(written)? {
+                    return Ok(Some(guid));
                 }
+                Ok(None)
             }
 
             READ_USER_DATA => {
@@ -116,13 +112,12 @@ impl IoUringAuth {
                 assert!(read >= 0);
                 let read = read as usize;
 
-                self.auth.satisfy_read(read).unwrap();
+                self.auth.satisfy_read(read)?;
+                Ok(None)
             }
 
-            _ => {}
+            _ => Ok(None),
         }
-
-        None
     }
 }
 
@@ -194,14 +189,15 @@ impl IoUringReaderWriter {
         None
     }
 
-    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Option<Message> {
+    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
         match cqe.user_data() {
             WRITE_USER_DATA => {
                 let written = cqe.result();
                 assert!(written >= 0);
                 let written = written as usize;
 
-                self.writer.satisfy(written).unwrap();
+                self.writer.satisfy(written)?;
+                Ok(None)
             }
 
             READ_USER_DATA => {
@@ -209,15 +205,14 @@ impl IoUringReaderWriter {
                 assert!(read >= 0);
                 let read = read as usize;
 
-                if let Some(message) = self.reader.satisfy(read).unwrap() {
-                    return Some(message);
+                if let Some(message) = self.reader.satisfy(read)? {
+                    return Ok(Some(message));
                 }
+                Ok(None)
             }
 
-            _ => {}
+            _ => Ok(None),
         }
-
-        None
     }
 }
 
@@ -284,9 +279,9 @@ impl IoUringConnection {
         }
     }
 
-    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Option<Message> {
+    pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
         match self {
-            Self::Connecting(connector) => match connector.process_cqe(cqe) {
+            Self::Connecting(connector) => match connector.process_cqe(cqe)? {
                 Some(fd) => {
                     let Self::Connecting(IoUringConnector { serial, queue, .. }) =
                         std::mem::take(self)
@@ -295,12 +290,12 @@ impl IoUringConnection {
                     };
 
                     *self = Self::Auth(IoUringAuth::new(fd, serial, queue));
-                    None
+                    Ok(None)
                 }
-                None => None,
+                None => Ok(None),
             },
 
-            Self::Auth(auth) => match auth.process_cqe(cqe) {
+            Self::Auth(auth) => match auth.process_cqe(cqe)? {
                 Some(guid) => {
                     println!("GUID: {guid:?}");
                     let Self::Auth(IoUringAuth {
@@ -310,9 +305,9 @@ impl IoUringConnection {
                         unreachable!()
                     };
                     *self = Self::ReaderWriter(IoUringReaderWriter::new(fd, serial, queue));
-                    None
+                    Ok(None)
                 }
-                None => None,
+                None => Ok(None),
             },
 
             Self::ReaderWriter(reader_writer) => reader_writer.process_cqe(cqe),

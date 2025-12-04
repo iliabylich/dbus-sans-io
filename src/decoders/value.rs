@@ -207,135 +207,140 @@ impl ValueDecoder {
     }
 }
 
-#[test]
-fn test_read_byte() {
-    let mut buf = DecodingBuffer::new(b"\xFF");
-    buf.set_pos(0);
-    assert_eq!(ValueDecoder::decode_u8(&mut buf).unwrap(), 255);
-    assert!(buf.is_eof());
-}
+#[cfg(test)]
+mod tests {
+    use super::{DecodingBuffer, ValueDecoder};
 
-#[test]
-fn test_read_bool() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x01\x00\x00\x00");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), true);
-    assert!(buf.is_eof());
+    #[test]
+    fn test_read_byte() {
+        let mut buf = DecodingBuffer::new(b"\xFF");
+        buf.set_pos(0);
+        assert_eq!(ValueDecoder::decode_u8(&mut buf).unwrap(), 255);
+        assert!(buf.is_eof());
+    }
 
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x00\x00\x00\x00");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), false);
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_bool() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\x01\x00\x00\x00");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), true);
+        assert!(buf.is_eof());
 
-#[test]
-fn test_read_int16() {
-    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_i16(&mut buf).unwrap(),
-        0xBB << 8 | 0xAA
-    );
-    assert!(buf.is_eof());
-}
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\x00\x00\x00\x00");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_bool(&mut buf).unwrap(), false);
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_uint16() {
-    let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_u16(&mut buf).unwrap(),
-        0xBB << 8 | 0xAA
-    );
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_int16() {
+        let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_i16(&mut buf).unwrap(),
+            0xBB << 8 | 0xAA
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_int32() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_i32(&mut buf).unwrap(),
-        0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
-    );
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_uint16() {
+        let mut buf = DecodingBuffer::new(b"\0\0\xAA\xBB");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_u16(&mut buf).unwrap(),
+            0xBB << 8 | 0xAA
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_uint32() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_u32(&mut buf).unwrap(),
-        0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
-    );
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_int32() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_i32(&mut buf).unwrap(),
+            0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_int64() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_i64(&mut buf).unwrap(),
-        0x08 << 56
-            | 0x07 << 48
-            | 0x06 << 40
-            | 0x05 << 32
-            | 0x04 << 24
-            | 0x03 << 16
-            | 0x02 << 8
-            | 0x01,
-    );
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_uint32() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\xAA\xBB\xCC\xDD");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_u32(&mut buf).unwrap(),
+            0xDD << 24 | 0xCC << 16 | 0xBB << 8 | 0xAA
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_uint64() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
-    buf.set_pos(1);
-    assert_eq!(
-        ValueDecoder::decode_u64(&mut buf).unwrap(),
-        0x08 << 56
-            | 0x07 << 48
-            | 0x06 << 40
-            | 0x05 << 32
-            | 0x04 << 24
-            | 0x03 << 16
-            | 0x02 << 8
-            | 0x01,
-    );
-    assert!(buf.is_eof());
-}
+    #[test]
+    fn test_read_int64() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_i64(&mut buf).unwrap(),
+            0x08 << 56
+                | 0x07 << 48
+                | 0x06 << 40
+                | 0x05 << 32
+                | 0x04 << 24
+                | 0x03 << 16
+                | 0x02 << 8
+                | 0x01,
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_f64() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_f64(&mut buf).unwrap(), 0.123);
-    assert!(buf.is_eof())
-}
+    #[test]
+    fn test_read_uint64() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\x01\x02\x03\x04\x05\x06\x07\x08");
+        buf.set_pos(1);
+        assert_eq!(
+            ValueDecoder::decode_u64(&mut buf).unwrap(),
+            0x08 << 56
+                | 0x07 << 48
+                | 0x06 << 40
+                | 0x05 << 32
+                | 0x04 << 24
+                | 0x03 << 16
+                | 0x02 << 8
+                | 0x01,
+        );
+        assert!(buf.is_eof());
+    }
 
-#[test]
-fn test_read_object_path() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_object_path(&mut buf).unwrap(), "abcd");
-    assert!(buf.is_eof())
-}
+    #[test]
+    fn test_read_f64() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\0\0\0\0\xB0\x72\x68\x91\xED\x7C\xBF\x3F");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_f64(&mut buf).unwrap(), 0.123);
+        assert!(buf.is_eof())
+    }
 
-#[test]
-fn test_read_string() {
-    let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_string(&mut buf).unwrap(), "abcd");
-    assert!(buf.is_eof())
-}
+    #[test]
+    fn test_read_object_path() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_object_path(&mut buf).unwrap(), "abcd");
+        assert!(buf.is_eof())
+    }
 
-#[test]
-fn test_read_signature() {
-    let mut buf = DecodingBuffer::new(b"\0\x04abcd\0");
-    buf.set_pos(1);
-    assert_eq!(ValueDecoder::decode_signature(&mut buf).unwrap(), b"abcd");
-    assert!(buf.is_eof())
+    #[test]
+    fn test_read_string() {
+        let mut buf = DecodingBuffer::new(b"\0\0\0\0\x04\0\0\0abcd\0");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_string(&mut buf).unwrap(), "abcd");
+        assert!(buf.is_eof())
+    }
+
+    #[test]
+    fn test_read_signature() {
+        let mut buf = DecodingBuffer::new(b"\0\x04abcd\0");
+        buf.set_pos(1);
+        assert_eq!(ValueDecoder::decode_signature(&mut buf).unwrap(), b"abcd");
+        assert!(buf.is_eof())
+    }
 }

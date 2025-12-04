@@ -193,10 +193,12 @@ impl AsRawFd for PollConnection {
 }
 
 impl PollConnection {
-    pub(crate) fn new(stream: UnixStream) -> Self {
-        stream.set_nonblocking(true).unwrap();
+    pub(crate) fn new(stream: UnixStream) -> Result<Self> {
+        stream.set_nonblocking(true)?;
 
-        Self::Auth(PollAuthFSM::new(NonBlockingUnixStream::new(stream)))
+        Ok(Self::Auth(PollAuthFSM::new(NonBlockingUnixStream::new(
+            stream,
+        ))))
     }
 
     pub(crate) fn enqueue(&mut self, message: &mut Message) -> Result<()> {

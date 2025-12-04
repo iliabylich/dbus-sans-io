@@ -2,7 +2,7 @@ use crate::{
     decoders::{DecodingBuffer, HeaderDecoder, ValueDecoder, signature::SignatureDecoder},
     types::{CompleteType, Header, HeaderFieldName, Message, MessageType, Value},
 };
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 
 pub(crate) struct MessageDecoder;
 
@@ -34,10 +34,10 @@ impl MessageDecoder {
             let Value::Struct(pair) = header_field else {
                 bail!("got {header_field:?} instead of a header field struct");
             };
-            ensure!(pair.len() == 2);
-            let mut pair = pair.into_iter();
-            let header_field_name = pair.next().unwrap();
-            let value = pair.next().unwrap();
+
+            let [header_field_name, value]: [_; 2] = pair.try_into().map_err(|not_a_pair| {
+                anyhow::anyhow!("expected two elements, got {not_a_pair:?}")
+            })?;
 
             let Value::Byte(header_field_name) = header_field_name else {
                 bail!("got {header_field_name:?} instead of a header field name");
