@@ -58,7 +58,8 @@ fn addr_to_connect() -> sockaddr_un {
     let (_, path) = address.split_once("=").expect("no = separator");
     let path = {
         let mut out = [0; 108];
-        out[..path.len()].copy_from_slice(unsafe { std::mem::transmute(path.as_bytes()) });
+        out[..path.len()]
+            .copy_from_slice(unsafe { std::mem::transmute::<&[u8], &[i8]>(path.as_bytes()) });
         out
     };
     sockaddr_un {

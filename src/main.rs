@@ -13,7 +13,10 @@ mod types;
 use crate::{
     blocking_connection::BlockingConnection,
     io_uring_connection::IoUringConnection,
-    messages::{NameAcquired, PropertiesChanged},
+    messages::{
+        AddMatch, Hello, IntrospectRequest, IntrospectResponse, NameAcquired, PropertiesChanged,
+        RequestName,
+    },
     poll_connection::PollConnection,
     types::{CompleteType, Message, Value},
 };
@@ -25,16 +28,7 @@ fn session_connection() -> UnixStream {
 }
 
 fn hello() -> Message {
-    Message::MethodCall {
-        serial: 0,
-        path: String::from("/org/freedesktop/DBus"),
-        member: String::from("Hello"),
-        interface: Some(String::from("org.freedesktop.DBus")),
-        destination: Some(String::from("org.freedesktop.DBus")),
-        sender: None,
-        unix_fds: None,
-        body: vec![],
-    }
+    Hello.into_message()
 }
 
 fn show_notifiction() -> Message {
@@ -65,30 +59,26 @@ fn show_notifiction() -> Message {
     }
 }
 
-fn add_match(path: impl AsRef<str>) -> Message {
-    Message::MethodCall {
-        serial: 0,
-        path: String::from("/org/freedesktop/DBus"),
-        member: "AddMatch".to_string(),
-        interface: Some(String::from("org.freedesktop.DBus")),
-        destination: Some(String::from("org.freedesktop.DBus")),
-        sender: None,
-        unix_fds: None,
-        body: vec![Value::String(format!(
-            "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='{}'",
-            path.as_ref()
-        ))],
-    }
+fn add_match(path: impl Into<String>) -> Message {
+    AddMatch::new(path).into_message()
 }
 
-fn on_message(message: Message) {
+fn on_message(message: Message) -> Vec<Message> {
     if let Ok(name_acquired) = NameAcquired::try_parse(&message) {
         println!("{name_acquired:?}");
     } else if let Ok(properties_changed) = PropertiesChanged::try_parse(&message) {
         println!("{properties_changed:?}");
+    } else if let Ok(introspect_req) = IntrospectRequest::try_parse(&message) {
+        println!("{introspect_req:?}");
+        if introspect_req.destination == "org.me.test" && introspect_req.path == "/" {
+            let response = IntrospectResponse::new(introspect_req, INTROSPECTION).into_message();
+            return vec![response];
+        }
     } else {
         println!("Unknown: {:?}", message);
     }
+
+    vec![]
 }
 
 #[allow(dead_code)]
@@ -143,6 +133,19 @@ fn main_poll() {
     }
 }
 
+const INTROSPECTION: &str = r#"
+<?xml version="1.0" encoding="UTF-8"?>
+<node>
+    <interface name="org.me.test">
+        <method name="Plus">
+            <arg type="i" name="x" direction="in" />
+            <arg type="i" name="y" direction="in" />
+            <arg type="i" name="sum" direction="out" />
+        </method>
+    </interface>
+</node>
+"#;
+
 #[allow(dead_code)]
 fn main_io_uring() {
     use io_uring::IoUring;
@@ -155,6 +158,8 @@ fn main_io_uring() {
     conn.enqueue(&mut show_notifiction()).unwrap();
     conn.enqueue(&mut add_match("/org/local/PipewireDBus"))
         .unwrap();
+    conn.enqueue(&mut RequestName::new("org.me.test").into_message())
+        .unwrap();
 
     loop {
         if let Some(sqe) = conn.next_sqe() {
@@ -165,7 +170,11 @@ fn main_io_uring() {
 
         while let Some(cqe) = ring.completion().next() {
             if let Some(message) = conn.process_cqe(cqe) {
-                on_message(message);
+                let replies = on_message(message);
+                for mut reply in replies {
+                    println!("Replying with {reply:?}");
+                    conn.enqueue(&mut reply).unwrap();
+                }
             }
         }
     }

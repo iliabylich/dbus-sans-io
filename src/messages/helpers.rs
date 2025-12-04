@@ -11,27 +11,29 @@ macro_rules! message_is {
 }
 pub(crate) use message_is;
 
-macro_rules! interface_is {
-    ($interface:expr, $expected:expr) => {{
-        if $interface != $expected {
-            anyhow::bail!(
-                "expected interface to be {:?}, got {:?}",
-                $expected,
-                $interface
-            );
+macro_rules! define_matcher_macro {
+    ($macro_name:ident, $name:expr) => {
+        macro_rules! $macro_name {
+            ($obj:expr, $expected:expr) => {{
+                if $obj != $expected {
+                    anyhow::bail!("expected {} to be {:?}, got {:?}", $name, $expected, $obj);
+                }
+            }};
         }
-    }};
+    };
 }
+
+define_matcher_macro!(interface_is, "interface");
 pub(crate) use interface_is;
 
-macro_rules! path_is {
-    ($path:expr, $expected:expr) => {{
-        if $path != $expected {
-            anyhow::bail!("expected path to be {:?}, got {:?}", $expected, $path);
-        }
-    }};
-}
+define_matcher_macro!(destination_is, "destination");
+pub(crate) use destination_is;
+
+define_matcher_macro!(path_is, "path");
 pub(crate) use path_is;
+
+define_matcher_macro!(member_is, "member");
+pub(crate) use member_is;
 
 pub(crate) fn as_array<T, const N: usize>(slice: &[T]) -> Option<&[T; N]> {
     if slice.len() == N {
