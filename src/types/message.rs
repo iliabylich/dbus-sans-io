@@ -1,7 +1,7 @@
 use crate::types::{MessageType, Value};
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Message {
+pub enum Message {
     MethodCall {
         serial: u32,
         path: String,

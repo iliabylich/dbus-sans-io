@@ -1,15 +1,17 @@
 use crate::types::{Message, Value};
 
-pub(crate) struct AddMatch {
+pub struct AddMatch {
     path: String,
 }
 
 impl AddMatch {
-    pub(crate) fn new(path: impl Into<String>) -> Self {
+    pub fn new(path: impl Into<String>) -> Self {
         Self { path: path.into() }
     }
+}
 
-    pub(crate) fn into_message(self) -> Message {
+impl From<AddMatch> for Message {
+    fn from(value: AddMatch) -> Message {
         Message::MethodCall {
             serial: 0,
             path: String::from("/org/freedesktop/DBus"),
@@ -20,7 +22,7 @@ impl AddMatch {
             unix_fds: None,
             body: vec![Value::String(format!(
                 "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path='{}'",
-                self.path
+                value.path
             ))],
         }
     }

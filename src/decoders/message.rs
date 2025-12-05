@@ -108,6 +108,7 @@ impl MessageDecoder {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn build_message(
     header: Header,
     path: Option<String>,

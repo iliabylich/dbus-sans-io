@@ -1,9 +1,9 @@
 use crate::types::Message;
 
-pub(crate) struct Hello;
+pub struct Hello;
 
-impl Hello {
-    pub(crate) fn into_message(self) -> Message {
+impl From<Hello> for Message {
+    fn from(_: Hello) -> Message {
         Message::MethodCall {
             serial: 0,
             path: String::from("/org/freedesktop/DBus"),

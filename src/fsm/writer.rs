@@ -1,4 +1,3 @@
-use crate::{encoders::MessageEncoder, types::Message};
 use anyhow::{Context, Result};
 use std::collections::VecDeque;
 
@@ -20,13 +19,13 @@ impl WriterFSM {
         }
     }
 
-    pub(crate) fn enqueue(&mut self, message: &Message) -> Result<()> {
-        let buf = MessageEncoder::encode(message)?;
-        self.enqueue_serialized(buf);
-        Ok(())
-    }
+    // pub(crate) fn enqueue(&mut self, message: &Message) -> Result<()> {
+    //     let buf = MessageEncoder::encode(message)?;
+    //     self.enqueue_serialized(buf);
+    //     Ok(())
+    // }
 
-    pub(crate) fn enqueue_serialized(&mut self, buf: Vec<u8>) {
+    pub(crate) fn enqueue(&mut self, buf: Vec<u8>) {
         self.queue.push_back(QueueItem { pos: 0, buf });
     }
 

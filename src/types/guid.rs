@@ -1,9 +1,9 @@
 use anyhow::ensure;
 
 #[derive(PartialEq, Eq, Default)]
-pub(crate) struct GUID(pub(crate) Vec<u8>);
+pub(crate) struct Guid(pub(crate) Vec<u8>);
 
-impl GUID {
+impl Guid {
     pub(crate) const LENGTH: usize = 37;
 
     pub(crate) fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
@@ -11,7 +11,7 @@ impl GUID {
     }
 }
 
-impl std::fmt::Debug for GUID {
+impl std::fmt::Debug for Guid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.as_str() {
             Ok(s) => write!(f, "{:?}", s),
@@ -20,7 +20,7 @@ impl std::fmt::Debug for GUID {
     }
 }
 
-impl std::fmt::Display for GUID {
+impl std::fmt::Display for Guid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.as_str() {
             Ok(s) => write!(f, "{:?}", s),
@@ -29,7 +29,7 @@ impl std::fmt::Display for GUID {
     }
 }
 
-impl TryFrom<Vec<u8>> for GUID {
+impl TryFrom<Vec<u8>> for Guid {
     type Error = anyhow::Error;
 
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {

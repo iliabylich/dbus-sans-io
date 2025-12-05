@@ -1,20 +1,22 @@
-use std::collections::HashMap;
-
 use crate::{
-    messages::helpers::{body_is, interface_is, message_is, type_is, value_is},
+    body_is, interface_is, message_is, type_is,
     types::{CompleteType, Message, Value},
+    value_is,
 };
 use anyhow::Result;
+use std::collections::HashMap;
 
 #[derive(Debug)]
-pub(crate) struct PropertiesChanged {
-    path: String,
-    interface: String,
-    changes: HashMap<String, Value>,
+pub struct PropertiesChanged {
+    pub path: String,
+    pub interface: String,
+    pub changes: HashMap<String, Value>,
 }
 
-impl PropertiesChanged {
-    pub(crate) fn try_parse(message: &Message) -> Result<Self> {
+impl TryFrom<&Message> for PropertiesChanged {
+    type Error = anyhow::Error;
+
+    fn try_from(message: &Message) -> Result<Self> {
         message_is!(
             message,
             Message::Signal {

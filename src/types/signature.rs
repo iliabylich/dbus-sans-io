@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CompleteType {
+pub enum CompleteType {
     Byte,
     Bool,
     Int16,

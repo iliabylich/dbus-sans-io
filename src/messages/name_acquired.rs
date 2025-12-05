@@ -1,17 +1,18 @@
 use crate::{
-    messages::helpers::{body_is, interface_is, message_is, path_is},
+    body_is, interface_is, message_is, path_is,
     types::{Message, Value},
 };
 use anyhow::Result;
 
 #[derive(Debug)]
-pub(crate) struct NameAcquired {
-    #[allow(dead_code)]
-    pub(crate) name: String,
+pub struct NameAcquired {
+    pub name: String,
 }
 
-impl NameAcquired {
-    pub(crate) fn try_parse(message: &Message) -> Result<Self> {
+impl TryFrom<&Message> for NameAcquired {
+    type Error = anyhow::Error;
+
+    fn try_from(message: &Message) -> Result<Self> {
         message_is!(
             message,
             Message::Signal {

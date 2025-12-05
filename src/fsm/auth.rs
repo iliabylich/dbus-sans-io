@@ -1,4 +1,4 @@
-use crate::{fsm::ReadBuffer, types::GUID};
+use crate::{fsm::ReadBuffer, types::Guid};
 use anyhow::{Result, bail, ensure};
 
 #[derive(Debug)]
@@ -22,6 +22,7 @@ pub(crate) enum AuthWants<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum AuthWantsTag {
     Read,
     Write,
@@ -32,6 +33,7 @@ impl AuthFSM {
         Self::WritingZero
     }
 
+    #[allow(dead_code)]
     pub(crate) fn wants_tag(&self) -> AuthWantsTag {
         match self {
             Self::WritingZero
@@ -90,7 +92,7 @@ impl AuthFSM {
         Ok(())
     }
 
-    pub(crate) fn satisfy_write(&mut self, bytes_written: usize) -> Result<Option<GUID>> {
+    pub(crate) fn satisfy_write(&mut self, bytes_written: usize) -> Result<Option<Guid>> {
         match self {
             Self::WritingZero => {
                 ensure!(bytes_written == 1);
@@ -112,7 +114,7 @@ impl AuthFSM {
                 ensure!(*written <= DATA.len());
                 if *written == DATA.len() {
                     *self = Self::ReadingGUID {
-                        buf: ReadBuffer::new(GUID::LENGTH),
+                        buf: ReadBuffer::new(Guid::LENGTH),
                     };
                 }
                 Ok(None)
@@ -122,7 +124,7 @@ impl AuthFSM {
                 ensure!(*written <= BEGIN.len());
                 if *written == BEGIN.len() {
                     let buf = std::mem::take(buf);
-                    let guid = GUID::try_from(buf)?;
+                    let guid = Guid::try_from(buf)?;
                     Ok(Some(guid))
                 } else {
                     Ok(None)

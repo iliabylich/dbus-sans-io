@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! message_is {
     ($message:expr, $pat:pat) => {
         let $pat = $message else {
@@ -9,33 +10,52 @@ macro_rules! message_is {
         };
     };
 }
-pub(crate) use message_is;
 
-macro_rules! define_matcher_macro {
-    ($macro_name:ident, $name:expr) => {
-        macro_rules! $macro_name {
-            ($obj:expr, $expected:expr) => {{
-                if $obj != $expected {
-                    anyhow::bail!("expected {} to be {:?}, got {:?}", $name, $expected, $obj);
-                }
-            }};
+#[macro_export]
+macro_rules! interface_is {
+    ($interface:expr, $expected:expr) => {{
+        if $interface != $expected {
+            anyhow::bail!(
+                "expected interface to be {:?}, got {:?}",
+                $expected,
+                $interface
+            );
         }
-    };
+    }};
 }
 
-define_matcher_macro!(interface_is, "interface");
-pub(crate) use interface_is;
+#[macro_export]
+macro_rules! destination_is {
+    ($destination:expr, $expected:expr) => {{
+        if $destination != $expected {
+            anyhow::bail!(
+                "expected destination to be {:?}, got {:?}",
+                $expected,
+                $destination
+            );
+        }
+    }};
+}
 
-define_matcher_macro!(destination_is, "destination");
-pub(crate) use destination_is;
+#[macro_export]
+macro_rules! path_is {
+    ($path:expr, $expected:expr) => {{
+        if $path != $expected {
+            anyhow::bail!("expected path to be {:?}, got {:?}", $expected, $path);
+        }
+    }};
+}
 
-define_matcher_macro!(path_is, "path");
-pub(crate) use path_is;
+#[macro_export]
+macro_rules! member_is {
+    ($member:expr, $expected:expr) => {{
+        if $member != $expected {
+            anyhow::bail!("expected member to be {:?}, got {:?}", $expected, $member);
+        }
+    }};
+}
 
-define_matcher_macro!(member_is, "member");
-pub(crate) use member_is;
-
-pub(crate) fn as_array<T, const N: usize>(slice: &[T]) -> Option<&[T; N]> {
+pub fn as_array<T, const N: usize>(slice: &[T]) -> Option<&[T; N]> {
     if slice.len() == N {
         let ptr = slice.as_ptr().cast();
 
@@ -46,15 +66,17 @@ pub(crate) fn as_array<T, const N: usize>(slice: &[T]) -> Option<&[T; N]> {
         None
     }
 }
+
+#[macro_export]
 macro_rules! body_is {
     ($body:expr, $expected:pat) => {
-        let Some($expected) = $crate::messages::helpers::as_array($body) else {
+        let Some($expected) = $crate::messages::as_array($body) else {
             anyhow::bail!("body format mismatch: {:?}", $body);
         };
     };
 }
-pub(crate) use body_is;
 
+#[macro_export]
 macro_rules! value_is {
     ($value:expr, $pat:pat) => {
         let $pat = $value else {
@@ -62,8 +84,8 @@ macro_rules! value_is {
         };
     };
 }
-pub(crate) use value_is;
 
+#[macro_export]
 macro_rules! type_is {
     ($type:expr, $pat:pat) => {
         let $pat = $type else {
@@ -71,4 +93,3 @@ macro_rules! type_is {
         };
     };
 }
-pub(crate) use type_is;

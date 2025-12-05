@@ -1,19 +1,21 @@
 use crate::{
-    messages::helpers::{body_is, interface_is, member_is, message_is, path_is},
+    body_is, interface_is, member_is, message_is, path_is,
     types::{Message, Value},
 };
 use anyhow::Result;
 
 #[derive(Debug)]
-pub(crate) struct IntrospectRequest {
-    pub(crate) serial: u32,
-    pub(crate) destination: String,
-    pub(crate) path: String,
-    pub(crate) sender: String,
+pub struct IntrospectRequest {
+    pub serial: u32,
+    pub destination: String,
+    pub path: String,
+    pub sender: String,
 }
 
-impl IntrospectRequest {
-    pub(crate) fn try_parse(message: &Message) -> Result<Self> {
+impl TryFrom<&Message> for IntrospectRequest {
+    type Error = anyhow::Error;
+
+    fn try_from(message: &Message) -> Result<Self> {
         message_is!(
             message,
             Message::MethodCall {
@@ -42,24 +44,26 @@ impl IntrospectRequest {
     }
 }
 
-pub(crate) struct IntrospectResponse {
+pub struct IntrospectResponse {
     req: IntrospectRequest,
     xml: &'static str,
 }
 
 impl IntrospectResponse {
-    pub(crate) fn new(req: IntrospectRequest, xml: &'static str) -> Self {
+    pub fn new(req: IntrospectRequest, xml: &'static str) -> Self {
         Self { req, xml }
     }
+}
 
-    pub(crate) fn into_message(self) -> Message {
+impl From<IntrospectResponse> for Message {
+    fn from(value: IntrospectResponse) -> Message {
         Message::MethodReturn {
-            serial: 15,
-            reply_serial: self.req.serial,
-            destination: Some(self.req.sender),
+            serial: 0,
+            reply_serial: value.req.serial,
+            destination: Some(value.req.sender),
             sender: None,
             unix_fds: None,
-            body: vec![Value::String(self.xml.to_string())],
+            body: vec![Value::String(value.xml.to_string())],
         }
     }
 }

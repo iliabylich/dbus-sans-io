@@ -1,7 +1,9 @@
 use crate::{
+    encoders::MessageEncoder,
     fsm::{AuthFSM, AuthWants, ReaderFSM, WriterFSM},
     serial::Serial,
-    types::{GUID, Message},
+    session_connection,
+    types::Message,
 };
 use anyhow::Result;
 use std::{
@@ -9,7 +11,7 @@ use std::{
     os::{fd::FromRawFd, unix::net::UnixStream},
 };
 
-pub(crate) struct BlockingConnection {
+pub struct BlockingConnection {
     stream: UnixStream,
     serial: Serial,
 
@@ -19,19 +21,18 @@ pub(crate) struct BlockingConnection {
 }
 
 impl BlockingConnection {
-    pub(crate) fn new(stream: UnixStream) -> Self {
-        Self {
-            stream,
+    pub fn session() -> Result<Self> {
+        Ok(Self {
+            stream: session_connection()?,
             serial: Serial::zero(),
 
             auth: AuthFSM::new(),
             reader: ReaderFSM::new(),
             writer: WriterFSM::new(),
-        }
+        })
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn from_fd(fd: i32) -> Self {
+    pub fn from_fd(fd: i32) -> Self {
         Self {
             stream: unsafe { UnixStream::from_raw_fd(fd) },
 
@@ -42,7 +43,7 @@ impl BlockingConnection {
         }
     }
 
-    pub(crate) fn auth(&mut self) -> Result<GUID> {
+    pub fn auth(&mut self) -> Result<()> {
         loop {
             match self.auth.wants() {
                 AuthWants::Read(buf) => {
@@ -52,18 +53,19 @@ impl BlockingConnection {
 
                 AuthWants::Write(bytes) => {
                     let len = self.stream.write(bytes)?;
-                    if let Some(guid) = self.auth.satisfy_write(len)? {
-                        return Ok(guid);
+                    if let Some(_guid) = self.auth.satisfy_write(len)? {
+                        return Ok(());
                     }
                 }
             }
         }
     }
 
-    pub(crate) fn send_message(&mut self, message: &mut Message) -> Result<()> {
+    pub fn send_message(&mut self, message: &mut Message) -> Result<()> {
         *message.serial_mut() = self.serial.increment_and_get();
 
-        self.writer.enqueue(message)?;
+        let buf = MessageEncoder::encode(message)?;
+        self.writer.enqueue(buf);
 
         loop {
             let Some(buf) = self.writer.wants() else {
@@ -76,7 +78,7 @@ impl BlockingConnection {
         Ok(())
     }
 
-    pub(crate) fn read_message(&mut self) -> Result<Message> {
+    pub fn read_message(&mut self) -> Result<Message> {
         loop {
             let buf = self.reader.wants();
             let len = self.stream.read(buf)?;

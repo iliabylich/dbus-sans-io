@@ -1,5 +1,7 @@
 mod auth;
-pub(crate) use auth::{AuthFSM, AuthWants, AuthWantsTag};
+#[allow(unused_imports)]
+pub(crate) use auth::AuthWantsTag;
+pub(crate) use auth::{AuthFSM, AuthWants};
 
 mod reader;
 pub(crate) use reader::ReaderFSM;
@@ -9,6 +11,3 @@ pub(crate) use read_buffer::ReadBuffer;
 
 mod writer;
 pub(crate) use writer::WriterFSM;
-
-mod connect;
-pub(crate) use connect::{ConnectFSM, ConnectWants};
