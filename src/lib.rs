@@ -3,7 +3,7 @@ use std::os::unix::net::UnixStream;
 
 mod decoders;
 mod encoders;
-mod fsm;
+pub mod fsm;
 mod serial;
 mod types;
 
@@ -24,6 +24,7 @@ pub use io_uring_connection::IoUringConnection;
 
 pub use types::{CompleteType, Message, Value};
 pub mod messages;
+pub use encoders::MessageEncoder;
 
 #[allow(dead_code)]
 pub(crate) fn session_connection() -> Result<UnixStream> {

@@ -4,10 +4,10 @@ use crate::{
 };
 use anyhow::Result;
 
-pub(crate) struct MessageEncoder;
+pub struct MessageEncoder;
 
 impl MessageEncoder {
-    pub(crate) fn encode(message: &Message) -> Result<Vec<u8>> {
+    pub fn encode(message: &Message) -> Result<Vec<u8>> {
         let mut buf = EncodingBuffer::new();
 
         HeaderEncoder::encode(

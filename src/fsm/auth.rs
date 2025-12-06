@@ -1,14 +1,28 @@
 use crate::{fsm::ReadBuffer, types::Guid};
 use anyhow::{Result, bail, ensure};
 
-#[derive(Debug)]
-pub(crate) enum AuthFSM {
+#[derive(Debug, Default)]
+pub enum AuthFSM {
+    #[default]
     WritingZero,
-    WritingAuthExternal { written: usize },
-    ReadingData { buf: ReadBuffer },
-    WritingData { written: usize },
-    ReadingGUID { buf: ReadBuffer },
-    WritingBegin { written: usize, buf: Vec<u8> },
+    WritingAuthExternal {
+        written: usize,
+    },
+    ReadingData {
+        #[expect(private_interfaces)]
+        buf: ReadBuffer,
+    },
+    WritingData {
+        written: usize,
+    },
+    ReadingGUID {
+        #[expect(private_interfaces)]
+        buf: ReadBuffer,
+    },
+    WritingBegin {
+        written: usize,
+        buf: Vec<u8>,
+    },
 }
 
 const AUTH_EXTERNAL: &[u8] = b"AUTH EXTERNAL\r\n";
@@ -16,25 +30,23 @@ const DATA: &[u8] = b"DATA\r\n";
 const BEGIN: &[u8] = b"BEGIN\r\n";
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum AuthWants<'a> {
+pub enum AuthWants<'a> {
     Read(&'a mut [u8]),
     Write(&'a [u8]),
 }
 
 #[derive(Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum AuthWantsTag {
+pub enum AuthWantsTag {
     Read,
     Write,
 }
 
 impl AuthFSM {
-    pub(crate) fn new() -> Self {
-        Self::WritingZero
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn wants_tag(&self) -> AuthWantsTag {
+    pub fn wants_tag(&self) -> AuthWantsTag {
         match self {
             Self::WritingZero
             | Self::WritingAuthExternal { .. }
@@ -45,7 +57,7 @@ impl AuthFSM {
         }
     }
 
-    pub(crate) fn wants(&mut self) -> AuthWants<'_> {
+    pub fn wants(&mut self) -> AuthWants<'_> {
         match self {
             Self::WritingZero => AuthWants::Write(b"\0"),
             Self::WritingAuthExternal { written } => {
@@ -65,7 +77,7 @@ impl AuthFSM {
         }
     }
 
-    pub(crate) fn satisfy_read(&mut self, bytes_read: usize) -> Result<()> {
+    pub fn satisfy_read(&mut self, bytes_read: usize) -> Result<()> {
         match self {
             Self::ReadingData { buf } => {
                 buf.add_pos(bytes_read);
@@ -92,7 +104,7 @@ impl AuthFSM {
         Ok(())
     }
 
-    pub(crate) fn satisfy_write(&mut self, bytes_written: usize) -> Result<Option<Guid>> {
+    pub fn satisfy_write(&mut self, bytes_written: usize) -> Result<Option<()>> {
         match self {
             Self::WritingZero => {
                 ensure!(bytes_written == 1);
@@ -124,8 +136,8 @@ impl AuthFSM {
                 ensure!(*written <= BEGIN.len());
                 if *written == BEGIN.len() {
                     let buf = std::mem::take(buf);
-                    let guid = Guid::try_from(buf)?;
-                    Ok(Some(guid))
+                    let _guid = Guid::try_from(buf)?;
+                    Ok(Some(()))
                 } else {
                     Ok(None)
                 }
@@ -179,8 +191,6 @@ mod tests {
         fsm.satisfy_read(guid.len()).unwrap();
 
         assert_eq!(fsm.wants(), AuthWants::Write(BEGIN));
-        let guid = fsm.satisfy_write(BEGIN.len()).unwrap().unwrap();
-
-        assert_eq!(guid.as_str().unwrap(), "a97099b37b54cdc2a686559c6922fdeb");
+        fsm.satisfy_write(BEGIN.len()).unwrap().unwrap();
     }
 }

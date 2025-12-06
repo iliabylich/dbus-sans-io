@@ -11,4 +11,4 @@ mod value;
 pub(crate) use value::ValueEncoder;
 
 mod message;
-pub(crate) use message::MessageEncoder;
+pub use message::MessageEncoder;

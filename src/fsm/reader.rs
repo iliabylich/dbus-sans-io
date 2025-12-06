@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Context as _, Result};
 
 #[derive(Debug)]
-pub(crate) struct ReaderFSM {
+pub struct ReaderFSM {
     state: State,
     buf: ReadBuffer,
 }
@@ -17,19 +17,25 @@ enum State {
     ReadingFullMessage,
 }
 
-impl ReaderFSM {
-    pub(crate) fn new() -> Self {
+impl Default for ReaderFSM {
+    fn default() -> Self {
         Self {
             state: State::ReadingHeader,
             buf: ReadBuffer::new(HeaderDecoder::LENGTH + std::mem::size_of::<u32>()),
         }
     }
+}
 
-    pub(crate) fn wants(&mut self) -> &mut [u8] {
+impl ReaderFSM {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn wants(&mut self) -> &mut [u8] {
         self.buf.remaining_part_mut()
     }
 
-    pub(crate) fn satisfy(&mut self, read: usize) -> Result<Option<Message>> {
+    pub fn satisfy(&mut self, read: usize) -> Result<Option<Message>> {
         self.buf.add_pos(read);
         if !self.buf.is_full() {
             return Ok(None);
