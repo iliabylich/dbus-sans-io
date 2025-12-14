@@ -6,17 +6,17 @@ use anyhow::Result;
 use std::borrow::Cow;
 
 #[derive(Debug)]
-pub struct IntrospectRequest {
+pub struct IntrospectRequest<'a> {
     pub serial: u32,
-    pub destination: Cow<'static, str>,
-    pub path: Cow<'static, str>,
-    pub sender: Cow<'static, str>,
+    pub destination: Cow<'a, str>,
+    pub path: Cow<'a, str>,
+    pub sender: Cow<'a, str>,
 }
 
-impl TryFrom<&Message> for IntrospectRequest {
+impl<'a> TryFrom<&'a Message> for IntrospectRequest<'a> {
     type Error = anyhow::Error;
 
-    fn try_from(message: &Message) -> Result<Self> {
+    fn try_from(message: &'a Message) -> Result<Self> {
         message_is!(
             message,
             Message::MethodCall {
@@ -45,23 +45,23 @@ impl TryFrom<&Message> for IntrospectRequest {
     }
 }
 
-pub struct IntrospectResponse {
-    req: IntrospectRequest,
+pub struct IntrospectResponse<'a> {
+    req: IntrospectRequest<'a>,
     xml: &'static str,
 }
 
-impl IntrospectResponse {
-    pub fn new(req: IntrospectRequest, xml: &'static str) -> Self {
+impl<'a> IntrospectResponse<'a> {
+    pub fn new(req: IntrospectRequest<'a>, xml: &'static str) -> Self {
         Self { req, xml }
     }
 }
 
-impl From<IntrospectResponse> for Message {
-    fn from(value: IntrospectResponse) -> Message {
+impl<'a> From<IntrospectResponse<'a>> for Message {
+    fn from(value: IntrospectResponse<'a>) -> Message {
         Message::MethodReturn {
             serial: 0,
             reply_serial: value.req.serial,
-            destination: Some(value.req.sender),
+            destination: Some(Cow::Owned(value.req.sender.to_string())),
             sender: None,
             unix_fds: None,
             body: vec![Value::String(value.xml.to_string())],

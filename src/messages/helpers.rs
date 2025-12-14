@@ -56,15 +56,7 @@ macro_rules! member_is {
 }
 
 pub fn as_array<T, const N: usize>(slice: &[T]) -> Option<&[T; N]> {
-    if slice.len() == N {
-        let ptr = slice.as_ptr().cast();
-
-        // SAFETY: The underlying array of a slice can be reinterpreted as an actual array `[T; N]` if `N` is not greater than the slice's length.
-        let me = unsafe { &*ptr };
-        Some(me)
-    } else {
-        None
-    }
+    slice.try_into().ok()
 }
 
 #[macro_export]
@@ -91,5 +83,29 @@ macro_rules! type_is {
         let $pat = $type else {
             anyhow::bail!("type mismatch: {:?}", $type);
         };
+    };
+}
+
+#[macro_export]
+macro_rules! define_sum_message {
+    ($name:ident, $($variant:ident),+) => {
+        #[derive(Debug)]
+        enum $name<'a> {
+            $($variant($variant<'a>)),+
+        }
+
+        impl<'a> TryFrom<&'a $crate::Message> for $name<'a> {
+            type Error = anyhow::Error;
+
+            fn try_from(message: &'a $crate::Message) -> anyhow::Result<Self> {
+                $(
+                    if let Ok(mapped) = $variant::try_from(message) {
+                        return Ok(Self::$variant(mapped));
+                    }
+                )+
+
+                anyhow::bail!("{message:?} doesn't match any registered type")
+            }
+        }
     };
 }

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use dbus_sans_io::{
-    Message, Value, body_is, destination_is, interface_is, member_is, message_is,
+    Message, Value, body_is, define_sum_message, destination_is, interface_is, member_is,
+    message_is,
     messages::{
         AddMatch, Hello, IntrospectRequest, IntrospectResponse, NameAcquired, PropertiesChanged,
         RequestName, ShowNotification,
@@ -23,14 +24,14 @@ const INTROSPECTION: &str = r#"
 "#;
 
 #[derive(Debug)]
-struct PlusRequest {
-    sender: Cow<'static, str>,
+struct PlusRequest<'a> {
+    sender: Cow<'a, str>,
     serial: u32,
     lhs: i32,
     rhs: i32,
 }
 
-impl TryFrom<&Message> for PlusRequest {
+impl<'a> TryFrom<&'a Message> for PlusRequest<'a> {
     type Error = anyhow::Error;
 
     fn try_from(message: &Message) -> Result<Self> {
@@ -63,22 +64,22 @@ impl TryFrom<&Message> for PlusRequest {
     }
 }
 
-struct PlusResponse {
-    req: PlusRequest,
+struct PlusResponse<'a> {
+    req: PlusRequest<'a>,
 }
 
-impl PlusResponse {
-    fn new(req: PlusRequest) -> Self {
+impl<'a> PlusResponse<'a> {
+    fn new(req: PlusRequest<'a>) -> Self {
         Self { req }
     }
 }
 
-impl From<PlusResponse> for Message {
-    fn from(value: PlusResponse) -> Message {
+impl<'a> From<PlusResponse<'a>> for Message {
+    fn from(value: PlusResponse<'a>) -> Message {
         Message::MethodReturn {
             serial: 0,
             reply_serial: value.req.serial,
-            destination: Some(value.req.sender),
+            destination: Some(Cow::Owned(value.req.sender.to_string())),
             sender: None,
             unix_fds: None,
             body: vec![Value::Int32(value.req.lhs + value.req.rhs)],
@@ -87,25 +88,41 @@ impl From<PlusResponse> for Message {
 }
 
 fn on_message(message: Message) -> Vec<Message> {
-    if let Ok(name_acquired) = NameAcquired::try_from(&message) {
-        println!("{name_acquired:?}");
-    } else if let Ok(properties_changed) = PropertiesChanged::try_from(&message) {
-        println!("{properties_changed:?}");
-    } else if let Ok(introspect_req) = IntrospectRequest::try_from(&message) {
-        println!("{introspect_req:?}");
-        if introspect_req.destination == "org.me.test" && introspect_req.path == "/" {
-            let response = IntrospectResponse::new(introspect_req, INTROSPECTION).into();
+    let Ok(message) = DBusMessage::try_from(&message) else {
+        println!("Unknown: {:?}", message);
+        return vec![];
+    };
+
+    match message {
+        DBusMessage::NameAcquired(name_acquired) => {
+            println!("{name_acquired:?}");
+        }
+        DBusMessage::PropertiesChanged(properties_changed) => {
+            println!("{properties_changed:?}");
+        }
+        DBusMessage::IntrospectRequest(introspect_req) => {
+            println!("{introspect_req:?}");
+            if introspect_req.destination == "org.me.test" && introspect_req.path == "/" {
+                let response = IntrospectResponse::new(introspect_req, INTROSPECTION).into();
+                return vec![response];
+            }
+        }
+        DBusMessage::PlusRequest(plus_req) => {
+            let response = PlusResponse::new(plus_req).into();
             return vec![response];
         }
-    } else if let Ok(plus_req) = PlusRequest::try_from(&message) {
-        let response = PlusResponse::new(plus_req).into();
-        return vec![response];
-    } else {
-        println!("Unknown: {:?}", message);
     }
 
     vec![]
 }
+
+define_sum_message!(
+    DBusMessage,
+    NameAcquired,
+    PropertiesChanged,
+    IntrospectRequest,
+    PlusRequest
+);
 
 #[cfg(feature = "blocking")]
 fn main() -> Result<()> {
