@@ -11,10 +11,13 @@ mod io_uring_connect_fsm;
 mod io_uring_reader_writer_fsm;
 mod sqe;
 
+#[derive(Default)]
 enum IoUringFSM {
     Connect(IoUringConnectFSM),
     Auth(IoUringAuthFSM),
     ReaderWriter(IoUringReaderWriterFSM),
+    #[default]
+    None,
 }
 
 pub struct IoUringConnection {
@@ -44,6 +47,7 @@ impl IoUringConnection {
             IoUringFSM::Connect(connector) => connector.enqueue(message),
             IoUringFSM::Auth(auth) => auth.enqueue(message),
             IoUringFSM::ReaderWriter(rw) => rw.enqueue(message),
+            IoUringFSM::None => unreachable!(),
         }
     }
 
@@ -52,23 +56,20 @@ impl IoUringConnection {
             IoUringFSM::Connect(connector) => Some(connector.next_sqe()),
             IoUringFSM::Auth(auth) => Some(auth.next_sqe()),
             IoUringFSM::ReaderWriter(rw) => rw.next_sqe(),
+            IoUringFSM::None => unreachable!(),
         }
     }
 
-    pub fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
-        macro_rules! take_fsm {
-            () => {{
-                let mut zeroed =
-                    unsafe { std::mem::MaybeUninit::<IoUringFSM>::zeroed().assume_init() };
-                std::mem::swap(&mut self.fsm, &mut zeroed);
-                zeroed
-            }};
-        }
+    fn take_fsm(&mut self) -> IoUringFSM {
+        std::mem::take(&mut self.fsm)
+    }
 
+    pub fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
         match &mut self.fsm {
             IoUringFSM::Connect(connector) => match connector.process_cqe(cqe)? {
                 Some(fd) => {
-                    let IoUringFSM::Connect(IoUringConnectFSM { serial, queue, .. }) = take_fsm!()
+                    let IoUringFSM::Connect(IoUringConnectFSM { serial, queue, .. }) =
+                        self.take_fsm()
                     else {
                         unreachable!()
                     };
@@ -89,7 +90,7 @@ impl IoUringConnection {
                 Some(_guid) => {
                     let IoUringFSM::Auth(IoUringAuthFSM {
                         fd, serial, queue, ..
-                    }) = take_fsm!()
+                    }) = self.take_fsm()
                     else {
                         unreachable!()
                     };
@@ -106,6 +107,8 @@ impl IoUringConnection {
             },
 
             IoUringFSM::ReaderWriter(rw) => rw.process_cqe(cqe),
+
+            IoUringFSM::None => unreachable!(),
         }
     }
 }
