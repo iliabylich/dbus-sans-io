@@ -1,5 +1,5 @@
 use anyhow::Result;
-use dbus_sansio::{
+use dbus_sans_io::{
     Message, Value, body_is, destination_is, interface_is, member_is, message_is,
     messages::{
         AddMatch, Hello, IntrospectRequest, IntrospectResponse, NameAcquired, PropertiesChanged,
@@ -109,7 +109,7 @@ fn on_message(message: Message) -> Vec<Message> {
 #[cfg(feature = "blocking")]
 fn main() -> Result<()> {
     println!("Blocking version\n\n");
-    use dbus_sansio::BlockingConnection;
+    use dbus_sans_io::BlockingConnection;
     let mut conn = BlockingConnection::session()?;
 
     conn.auth()?;
@@ -130,7 +130,7 @@ fn main() -> Result<()> {
 fn main() -> Result<()> {
     println!("Poll version\n\n");
 
-    use dbus_sansio::PollConnection;
+    use dbus_sans_io::PollConnection;
     use libc::{POLLERR, POLLIN, POLLOUT, poll, pollfd};
     use std::os::fd::AsRawFd;
     let mut conn = PollConnection::session()?;
@@ -174,7 +174,7 @@ fn main() -> Result<()> {
     use io_uring::IoUring;
     let mut ring = IoUring::new(10)?;
 
-    use dbus_sansio::IoUringConnection;
+    use dbus_sans_io::IoUringConnection;
     let mut conn = IoUringConnection::session();
 
     conn.enqueue(&mut Hello.into())?;
