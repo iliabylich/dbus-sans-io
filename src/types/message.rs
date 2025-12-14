@@ -1,22 +1,23 @@
 use crate::types::{MessageType, Value};
+use std::borrow::Cow;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
     MethodCall {
         serial: u32,
-        path: String,
-        member: String,
-        interface: Option<String>,
-        destination: Option<String>,
-        sender: Option<String>,
+        path: Cow<'static, str>,
+        member: Cow<'static, str>,
+        interface: Option<Cow<'static, str>>,
+        destination: Option<Cow<'static, str>>,
+        sender: Option<Cow<'static, str>>,
         unix_fds: Option<u32>,
         body: Vec<Value>,
     },
     MethodReturn {
         serial: u32,
         reply_serial: u32,
-        destination: Option<String>,
-        sender: Option<String>,
+        destination: Option<Cow<'static, str>>,
+        sender: Option<Cow<'static, str>>,
         unix_fds: Option<u32>,
         body: Vec<Value>,
     },
@@ -24,18 +25,18 @@ pub enum Message {
         serial: u32,
         error_name: String,
         reply_serial: u32,
-        destination: Option<String>,
-        sender: Option<String>,
+        destination: Option<Cow<'static, str>>,
+        sender: Option<Cow<'static, str>>,
         unix_fds: Option<u32>,
         body: Vec<Value>,
     },
     Signal {
         serial: u32,
-        path: String,
-        interface: String,
-        member: String,
-        destination: Option<String>,
-        sender: Option<String>,
+        path: Cow<'static, str>,
+        interface: Cow<'static, str>,
+        member: Cow<'static, str>,
+        destination: Option<Cow<'static, str>>,
+        sender: Option<Cow<'static, str>>,
         unix_fds: Option<u32>,
         body: Vec<Value>,
     },
@@ -69,9 +70,9 @@ impl Message {
         }
     }
 
-    pub(crate) fn path(&self) -> Option<&str> {
+    pub(crate) fn path(&self) -> Option<Cow<'static, str>> {
         match self {
-            Self::MethodCall { path, .. } | Self::Signal { path, .. } => Some(path),
+            Self::MethodCall { path, .. } | Self::Signal { path, .. } => Some(path.clone()),
             _ => None,
         }
     }
@@ -107,12 +108,12 @@ impl Message {
         }
     }
 
-    pub(crate) fn destination(&self) -> Option<&str> {
+    pub(crate) fn destination(&self) -> Option<Cow<'static, str>> {
         match self {
             Self::MethodCall { destination, .. }
             | Self::MethodReturn { destination, .. }
             | Self::Error { destination, .. }
-            | Self::Signal { destination, .. } => destination.as_deref(),
+            | Self::Signal { destination, .. } => destination.clone(),
         }
     }
 

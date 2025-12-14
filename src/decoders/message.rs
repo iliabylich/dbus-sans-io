@@ -3,6 +3,7 @@ use crate::{
     types::{CompleteType, Header, HeaderFieldName, Message, MessageType, Value},
 };
 use anyhow::{Context, Result, bail};
+use std::borrow::Cow;
 
 pub(crate) struct MessageDecoder;
 
@@ -53,10 +54,10 @@ impl MessageDecoder {
                     path = Some(value);
                 }
                 (HeaderFieldName::Interface, Value::String(value)) => {
-                    interface = Some(value);
+                    interface = Some(Cow::Owned(value));
                 }
                 (HeaderFieldName::Member, Value::String(value)) => {
-                    member = Some(value);
+                    member = Some(Cow::Owned(value));
                 }
                 (HeaderFieldName::ErrorName, Value::String(value)) => {
                     error_name = Some(value);
@@ -65,10 +66,10 @@ impl MessageDecoder {
                     reply_serial = Some(value);
                 }
                 (HeaderFieldName::Destination, Value::String(value)) => {
-                    destination = Some(value);
+                    destination = Some(Cow::Owned(value));
                 }
                 (HeaderFieldName::Sender, Value::String(value)) => {
-                    sender = Some(value);
+                    sender = Some(Cow::Owned(value));
                 }
                 (HeaderFieldName::Signature, Value::Signature(value)) => {
                     let mut buf = DecodingBuffer::new(&value);
@@ -111,13 +112,13 @@ impl MessageDecoder {
 #[expect(clippy::too_many_arguments)]
 fn build_message(
     header: Header,
-    path: Option<String>,
-    interface: Option<String>,
-    member: Option<String>,
+    path: Option<Cow<'static, str>>,
+    interface: Option<Cow<'static, str>>,
+    member: Option<Cow<'static, str>>,
     error_name: Option<String>,
     reply_serial: Option<u32>,
-    destination: Option<String>,
-    sender: Option<String>,
+    destination: Option<Cow<'static, str>>,
+    sender: Option<Cow<'static, str>>,
     unix_fds: Option<u32>,
     body: Vec<Value>,
 ) -> Result<Message> {

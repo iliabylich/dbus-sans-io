@@ -7,6 +7,7 @@ use dbus_sans_io::{
     },
     path_is,
 };
+use std::borrow::Cow;
 
 const INTROSPECTION: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -23,7 +24,7 @@ const INTROSPECTION: &str = r#"
 
 #[derive(Debug)]
 struct PlusRequest {
-    sender: String,
+    sender: Cow<'static, str>,
     serial: u32,
     lhs: i32,
     rhs: i32,
@@ -115,8 +116,8 @@ fn main() -> Result<()> {
     conn.auth()?;
     conn.send_message(&mut Hello.into())?;
     conn.send_message(&mut ShowNotification::new("Header", "Body").into())?;
-    conn.send_message(&mut AddMatch::new("/org/local/PipewireDBus").into())?;
-    conn.send_message(&mut RequestName::new("org.me.test").into())?;
+    conn.send_message(&mut AddMatch::new(Cow::Borrowed("/org/local/PipewireDBus")).into())?;
+    conn.send_message(&mut RequestName::new(Cow::Borrowed("org.me.test")).into())?;
 
     loop {
         let message = conn.read_message()?;
@@ -152,8 +153,8 @@ fn main() -> Result<()> {
 
     conn.enqueue(&mut Hello.into())?;
     conn.enqueue(&mut ShowNotification::new("Header", "Body").into())?;
-    conn.enqueue(&mut AddMatch::new("/org/local/PipewireDBus").into())?;
-    conn.enqueue(&mut RequestName::new("org.me.test").into())?;
+    conn.enqueue(&mut AddMatch::new(Cow::Borrowed("/org/local/PipewireDBus")).into())?;
+    conn.enqueue(&mut RequestName::new(Cow::Borrowed("org.me.test")).into())?;
 
     loop {
         fds[0].events = conn.events();
@@ -179,8 +180,8 @@ fn main() -> Result<()> {
 
     conn.enqueue(&mut Hello.into())?;
     conn.enqueue(&mut ShowNotification::new("Header", "Body").into())?;
-    conn.enqueue(&mut AddMatch::new("/org/local/PipewireDBus").into())?;
-    conn.enqueue(&mut RequestName::new("org.me.test").into())?;
+    conn.enqueue(&mut AddMatch::new(Cow::Borrowed("/org/local/PipewireDBus")).into())?;
+    conn.enqueue(&mut RequestName::new(Cow::Borrowed("org.me.test")).into())?;
 
     loop {
         if let Some(sqe) = conn.next_sqe() {

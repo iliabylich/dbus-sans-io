@@ -3,13 +3,14 @@ use crate::{
     types::{Message, Value},
 };
 use anyhow::Result;
+use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct IntrospectRequest {
     pub serial: u32,
-    pub destination: String,
-    pub path: String,
-    pub sender: String,
+    pub destination: Cow<'static, str>,
+    pub path: Cow<'static, str>,
+    pub sender: Cow<'static, str>,
 }
 
 impl TryFrom<&Message> for IntrospectRequest {

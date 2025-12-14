@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::types::signature::CompleteType;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -14,7 +16,7 @@ pub enum Value {
     UnixFD(u32),
 
     String(String),
-    ObjectPath(String),
+    ObjectPath(Cow<'static, str>),
     Signature(Vec<u8>),
     Struct(Vec<Value>),
     Array(CompleteType, Vec<Value>),

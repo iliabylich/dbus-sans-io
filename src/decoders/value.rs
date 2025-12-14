@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     decoders::{DecodingBuffer, SignatureDecoder},
     types::{CompleteType, Signature, Value},
@@ -57,11 +59,11 @@ impl ValueDecoder {
         Ok(s)
     }
 
-    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<String> {
+    fn decode_object_path(buf: &mut DecodingBuffer) -> Result<Cow<'static, str>> {
         let len = Self::decode_u32(buf)? as usize;
         let path = buf.next_n(len)?.to_vec();
         buf.skip();
-        String::from_utf8(path).context("non-utf8 path")
+        Ok(String::from_utf8(path).context("non-utf8 path")?.into())
     }
 
     fn decode_complete_type(buf: &mut DecodingBuffer) -> Result<CompleteType> {

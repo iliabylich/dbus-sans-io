@@ -1,4 +1,5 @@
 use crate::types::{CompleteType, Message, Value};
+use std::borrow::Cow;
 
 pub struct ShowNotification {
     pub header: String,
@@ -18,10 +19,10 @@ impl From<ShowNotification> for Message {
     fn from(value: ShowNotification) -> Message {
         Message::MethodCall {
             serial: 0,
-            path: String::from("/org/freedesktop/Notifications"),
-            member: String::from("Notify"),
-            interface: Some(String::from("org.freedesktop.Notifications")),
-            destination: Some(String::from("org.freedesktop.Notifications")),
+            path: Cow::Borrowed("/org/freedesktop/Notifications"),
+            member: Cow::Borrowed("Notify"),
+            interface: Some(Cow::Borrowed("org.freedesktop.Notifications")),
+            destination: Some(Cow::Borrowed("org.freedesktop.Notifications")),
             sender: None,
             unix_fds: None,
             body: vec![

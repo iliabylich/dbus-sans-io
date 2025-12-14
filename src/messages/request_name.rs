@@ -1,12 +1,13 @@
 use crate::types::{Message, Value};
+use std::borrow::Cow;
 
 pub struct RequestName {
-    name: String,
+    name: Cow<'static, str>,
 }
 
 impl RequestName {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
+    pub fn new(name: Cow<'static, str>) -> Self {
+        Self { name }
     }
 }
 
@@ -14,13 +15,13 @@ impl From<RequestName> for Message {
     fn from(value: RequestName) -> Message {
         Message::MethodCall {
             serial: 0,
-            path: String::from("/org/freedesktop/DBus"),
-            member: String::from("RequestName"),
-            interface: Some(String::from("org.freedesktop.DBus")),
-            destination: Some(String::from("org.freedesktop.DBus")),
+            path: Cow::Borrowed("/org/freedesktop/DBus"),
+            member: Cow::Borrowed("RequestName"),
+            interface: Some(Cow::Borrowed("org.freedesktop.DBus")),
+            destination: Some(Cow::Borrowed("org.freedesktop.DBus")),
             sender: None,
             unix_fds: None,
-            body: vec![Value::String(value.name), Value::UInt32(7)],
+            body: vec![Value::String(value.name.to_string()), Value::UInt32(7)],
         }
     }
 }

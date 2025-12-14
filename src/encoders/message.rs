@@ -25,7 +25,7 @@ impl MessageEncoder {
                 ValueEncoder::encode_header(
                     &mut buf,
                     HeaderFieldName::Path,
-                    &Value::ObjectPath(path.to_string()),
+                    &Value::ObjectPath(path),
                 );
             }
             if let Some(interface) = message.interface() {

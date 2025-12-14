@@ -1,12 +1,13 @@
 use crate::types::{Message, Value};
+use std::borrow::Cow;
 
 pub struct AddMatch {
-    path: String,
+    path: Cow<'static, str>,
 }
 
 impl AddMatch {
-    pub fn new(path: impl Into<String>) -> Self {
-        Self { path: path.into() }
+    pub fn new(path: Cow<'static, str>) -> Self {
+        Self { path }
     }
 }
 
@@ -14,10 +15,10 @@ impl From<AddMatch> for Message {
     fn from(value: AddMatch) -> Message {
         Message::MethodCall {
             serial: 0,
-            path: String::from("/org/freedesktop/DBus"),
-            member: "AddMatch".to_string(),
-            interface: Some(String::from("org.freedesktop.DBus")),
-            destination: Some(String::from("org.freedesktop.DBus")),
+            path: Cow::Borrowed("/org/freedesktop/DBus"),
+            member: Cow::Borrowed("AddMatch"),
+            interface: Some(Cow::Borrowed("org.freedesktop.DBus")),
+            destination: Some(Cow::Borrowed("org.freedesktop.DBus")),
             sender: None,
             unix_fds: None,
             body: vec![Value::String(format!(

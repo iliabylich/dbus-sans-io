@@ -3,16 +3,17 @@ use crate::{
     types::{Message, Value},
 };
 use anyhow::Result;
+use std::borrow::Cow;
 
 #[derive(Debug)]
-pub struct NameAcquired {
-    pub name: String,
+pub struct NameAcquired<'a> {
+    pub name: Cow<'a, str>,
 }
 
-impl TryFrom<&Message> for NameAcquired {
+impl<'a> TryFrom<&'a Message> for NameAcquired<'a> {
     type Error = anyhow::Error;
 
-    fn try_from(message: &Message) -> Result<Self> {
+    fn try_from(message: &'a Message) -> Result<Self> {
         message_is!(
             message,
             Message::Signal {
@@ -27,6 +28,8 @@ impl TryFrom<&Message> for NameAcquired {
         path_is!(path, "/org/freedesktop/DBus");
         body_is!(body, [Value::String(name)]);
 
-        Ok(Self { name: name.clone() })
+        Ok(Self {
+            name: Cow::Borrowed(name.as_str()),
+        })
     }
 }

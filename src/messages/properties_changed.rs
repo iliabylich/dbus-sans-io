@@ -4,19 +4,19 @@ use crate::{
     value_is,
 };
 use anyhow::Result;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 #[derive(Debug)]
-pub struct PropertiesChanged {
-    pub path: String,
-    pub interface: String,
-    pub changes: HashMap<String, Value>,
+pub struct PropertiesChanged<'a> {
+    pub path: Cow<'a, str>,
+    pub interface: Cow<'a, str>,
+    pub changes: HashMap<Cow<'a, str>, Value>,
 }
 
-impl TryFrom<&Message> for PropertiesChanged {
+impl<'a> TryFrom<&'a Message> for PropertiesChanged<'a> {
     type Error = anyhow::Error;
 
-    fn try_from(message: &Message) -> Result<Self> {
+    fn try_from(message: &'a Message) -> Result<Self> {
         message_is!(
             message,
             Message::Signal {
@@ -41,12 +41,12 @@ impl TryFrom<&Message> for PropertiesChanged {
             value_is!(item, Value::DictEntry(key, value));
             value_is!(&**key, Value::String(key));
             value_is!(&**value, Value::Variant(value));
-            changes.insert(key.to_string(), *value.clone());
+            changes.insert(Cow::Borrowed(key.as_str()), *value.clone());
         }
 
         Ok(Self {
-            path: path.to_string(),
-            interface: interface.to_string(),
+            path: path.clone(),
+            interface: Cow::Borrowed(interface),
             changes,
         })
     }

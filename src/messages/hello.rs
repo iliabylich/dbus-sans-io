@@ -1,4 +1,5 @@
 use crate::types::Message;
+use std::borrow::Cow;
 
 pub struct Hello;
 
@@ -6,10 +7,10 @@ impl From<Hello> for Message {
     fn from(_: Hello) -> Message {
         Message::MethodCall {
             serial: 0,
-            path: String::from("/org/freedesktop/DBus"),
-            member: String::from("Hello"),
-            interface: Some(String::from("org.freedesktop.DBus")),
-            destination: Some(String::from("org.freedesktop.DBus")),
+            path: Cow::Borrowed("/org/freedesktop/DBus"),
+            member: Cow::Borrowed("Hello"),
+            interface: Some(Cow::Borrowed("org.freedesktop.DBus")),
+            destination: Some(Cow::Borrowed("org.freedesktop.DBus")),
             sender: None,
             unix_fds: None,
             body: vec![],
