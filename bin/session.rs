@@ -193,7 +193,17 @@ fn main() -> Result<()> {
     let mut ring = IoUring::new(10)?;
 
     use dbus_sans_io::IoUringConnection;
-    let mut conn = IoUringConnection::session();
+    const SOCKET_USER_DATA: u64 = 1;
+    const CONNECT_USER_DATA: u64 = 2;
+    const READ_USER_DATA: u64 = 3;
+    const WRITE_USER_DATA: u64 = 4;
+
+    let mut conn = IoUringConnection::session(
+        SOCKET_USER_DATA,
+        CONNECT_USER_DATA,
+        READ_USER_DATA,
+        WRITE_USER_DATA,
+    );
 
     conn.enqueue(&mut Hello.into())?;
     conn.enqueue(&mut ShowNotification::new("Header", "Body").into())?;

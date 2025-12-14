@@ -2,7 +2,7 @@ use crate::{
     Message,
     encoders::MessageEncoder,
     fsm::{AuthFSM, AuthWants},
-    io_uring_connection::sqe::{READ_USER_DATA, WRITE_USER_DATA, read_sqe, write_sqe},
+    io_uring_connection::sqe::{read_sqe, write_sqe},
     serial::Serial,
 };
 use anyhow::Result;
@@ -13,15 +13,25 @@ pub(crate) struct IoUringAuthFSM {
     pub(crate) serial: Serial,
     pub(crate) queue: Vec<Vec<u8>>,
     pub(crate) auth: AuthFSM,
+    read_user_data: u64,
+    write_user_data: u64,
 }
 
 impl IoUringAuthFSM {
-    pub(crate) fn new(fd: i32, serial: Serial, queue: Vec<Vec<u8>>) -> Self {
+    pub(crate) fn new(
+        fd: i32,
+        serial: Serial,
+        queue: Vec<Vec<u8>>,
+        read_user_data: u64,
+        write_user_data: u64,
+    ) -> Self {
         Self {
             fd,
             serial,
             queue,
             auth: AuthFSM::new(),
+            read_user_data,
+            write_user_data,
         }
     }
 
@@ -34,14 +44,14 @@ impl IoUringAuthFSM {
 
     pub(crate) fn next_sqe(&mut self) -> Sqe {
         match self.auth.wants() {
-            AuthWants::Read(buf) => read_sqe(self.fd, buf),
-            AuthWants::Write(buf) => write_sqe(self.fd, buf),
+            AuthWants::Read(buf) => read_sqe(self.fd, buf, self.read_user_data),
+            AuthWants::Write(buf) => write_sqe(self.fd, buf, self.write_user_data),
         }
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<()>> {
         match cqe.user_data() {
-            WRITE_USER_DATA => {
+            data if data == self.write_user_data => {
                 let written = cqe.result();
                 assert!(written >= 0);
                 let written = written as usize;
@@ -52,7 +62,7 @@ impl IoUringAuthFSM {
                 Ok(None)
             }
 
-            READ_USER_DATA => {
+            data if data == self.read_user_data => {
                 let read = cqe.result();
                 assert!(read >= 0);
                 let read = read as usize;

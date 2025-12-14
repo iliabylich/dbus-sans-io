@@ -1,7 +1,7 @@
 use crate::{
     Message,
     encoders::MessageEncoder,
-    io_uring_connection::sqe::{CONNECT_USER_DATA, SOCKET_USER_DATA, connect_sqe, socket_sqe},
+    io_uring_connection::sqe::{connect_sqe, socket_sqe},
     serial::Serial,
 };
 use anyhow::{Context as _, Result};
@@ -13,14 +13,18 @@ pub(crate) struct IoUringConnectFSM {
     fd_and_socket: Option<(i32, sockaddr_un)>,
     pub(crate) serial: Serial,
     pub(crate) queue: Vec<Vec<u8>>,
+    socket_user_data: u64,
+    connect_user_data: u64,
 }
 
 impl IoUringConnectFSM {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(socket_user_data: u64, connect_user_data: u64) -> Self {
         Self {
             fd_and_socket: None,
             serial: Serial::zero(),
             queue: vec![],
+            socket_user_data,
+            connect_user_data,
         }
     }
 
@@ -33,14 +37,14 @@ impl IoUringConnectFSM {
 
     pub(crate) fn next_sqe(&mut self) -> Sqe {
         match self.fd_and_socket.as_ref() {
-            None => socket_sqe(),
-            Some((fd, addr)) => connect_sqe(*fd, addr),
+            None => socket_sqe(self.socket_user_data),
+            Some((fd, addr)) => connect_sqe(*fd, addr, self.connect_user_data),
         }
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<i32>> {
         match cqe.user_data() {
-            SOCKET_USER_DATA => {
+            data if data == self.socket_user_data => {
                 let fd = cqe.result();
                 assert!(fd > 0);
 
@@ -53,7 +57,7 @@ impl IoUringConnectFSM {
                 Ok(None)
             }
 
-            CONNECT_USER_DATA => {
+            data if data == self.connect_user_data => {
                 assert!(cqe.result() >= 0);
 
                 let Some((fd, _)) = self.fd_and_socket.take() else {

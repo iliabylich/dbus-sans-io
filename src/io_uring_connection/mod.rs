@@ -18,13 +18,24 @@ enum IoUringFSM {
 }
 
 pub struct IoUringConnection {
+    read_user_data: u64,
+    write_user_data: u64,
+
     fsm: IoUringFSM,
 }
 
 impl IoUringConnection {
-    pub fn session() -> Self {
+    pub fn session(
+        socket_user_data: u64,
+        connect_user_data: u64,
+        read_user_data: u64,
+        write_user_data: u64,
+    ) -> Self {
         Self {
-            fsm: IoUringFSM::Connect(IoUringConnectFSM::new()),
+            read_user_data,
+            write_user_data,
+
+            fsm: IoUringFSM::Connect(IoUringConnectFSM::new(socket_user_data, connect_user_data)),
         }
     }
 
@@ -62,7 +73,13 @@ impl IoUringConnection {
                         unreachable!()
                     };
 
-                    self.fsm = IoUringFSM::Auth(IoUringAuthFSM::new(fd, serial, queue));
+                    self.fsm = IoUringFSM::Auth(IoUringAuthFSM::new(
+                        fd,
+                        serial,
+                        queue,
+                        self.read_user_data,
+                        self.write_user_data,
+                    ));
                     Ok(None)
                 }
                 None => Ok(None),
@@ -76,8 +93,13 @@ impl IoUringConnection {
                     else {
                         unreachable!()
                     };
-                    self.fsm =
-                        IoUringFSM::ReaderWriter(IoUringReaderWriterFSM::new(fd, serial, queue));
+                    self.fsm = IoUringFSM::ReaderWriter(IoUringReaderWriterFSM::new(
+                        fd,
+                        serial,
+                        queue,
+                        self.read_user_data,
+                        self.write_user_data,
+                    ));
                     Ok(None)
                 }
                 None => Ok(None),
