@@ -185,14 +185,14 @@ fn main() -> Result<()> {
     }
 }
 
-#[cfg(feature = "io-uring")]
+#[cfg(feature = "io-uring-with-dep")]
 fn main() -> Result<()> {
     println!("io_uring version\n\n");
 
     use io_uring::IoUring;
     let mut ring = IoUring::new(10)?;
 
-    use dbus_sans_io::IoUringConnection;
+    use dbus_sans_io::{Cqe, IoUringConnection, Sqe};
     const SOCKET_USER_DATA: u64 = 1;
     const CONNECT_USER_DATA: u64 = 2;
     const READ_USER_DATA: u64 = 3;
@@ -210,15 +210,60 @@ fn main() -> Result<()> {
     conn.enqueue(&mut AddMatch::new(Cow::Borrowed("/org/local/PipewireDBus")).into())?;
     conn.enqueue(&mut RequestName::new(Cow::Borrowed("org.me.test")).into())?;
 
+    fn map_sqe(sqe: Sqe) -> io_uring::squeue::Entry {
+        use io_uring::{opcode, types};
+        match sqe {
+            Sqe::Socket {
+                domain,
+                socket_type,
+                protocol,
+                user_data,
+            } => opcode::Socket::new(domain, socket_type, protocol)
+                .build()
+                .user_data(user_data),
+            Sqe::Connect {
+                fd,
+                addr,
+                addrlen,
+                user_data,
+            } => opcode::Connect::new(types::Fd(fd), addr, addrlen)
+                .build()
+                .user_data(user_data),
+            Sqe::Write {
+                fd,
+                buf,
+                len,
+                user_data,
+            } => opcode::Write::new(types::Fd(fd), buf, len)
+                .build()
+                .user_data(user_data),
+            Sqe::Read {
+                fd,
+                buf,
+                len,
+                user_data,
+            } => opcode::Read::new(types::Fd(fd), buf, len)
+                .build()
+                .user_data(user_data),
+        }
+    }
+
+    fn map_cqe(cqe: io_uring::cqueue::Entry) -> Cqe {
+        Cqe {
+            user_data: cqe.user_data(),
+            result: cqe.result(),
+        }
+    }
+
     loop {
         if let Some(sqe) = conn.next_sqe() {
-            unsafe { ring.submission().push(&sqe)? };
+            unsafe { ring.submission().push(&map_sqe(sqe))? };
         }
 
         ring.submit_and_wait(1)?;
 
         while let Some(cqe) = ring.completion().next() {
-            if let Some(message) = conn.process_cqe(cqe)? {
+            if let Some(message) = conn.process_cqe(map_cqe(cqe))? {
                 let replies = on_message(message);
                 for mut reply in replies {
                     println!("Replying with {reply:?}");

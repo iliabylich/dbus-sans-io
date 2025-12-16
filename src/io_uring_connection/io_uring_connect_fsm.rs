@@ -1,11 +1,10 @@
 use crate::{
-    Message,
+    Cqe, Message, Sqe,
     encoders::MessageEncoder,
     io_uring_connection::sqe::{connect_sqe, socket_sqe},
     serial::Serial,
 };
 use anyhow::{Context as _, Result};
-use io_uring::{cqueue::Entry as Cqe, squeue::Entry as Sqe};
 use libc::{AF_UNIX, sockaddr_un};
 
 #[derive(Debug)]
@@ -43,9 +42,9 @@ impl IoUringConnectFSM {
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<i32>> {
-        match cqe.user_data() {
+        match cqe.user_data {
             data if data == self.socket_user_data => {
-                let fd = cqe.result();
+                let fd = cqe.result;
                 assert!(fd > 0);
 
                 let None = self.fd_and_socket.take() else {
@@ -58,7 +57,7 @@ impl IoUringConnectFSM {
             }
 
             data if data == self.connect_user_data => {
-                assert!(cqe.result() >= 0);
+                assert!(cqe.result >= 0);
 
                 let Some((fd, _)) = self.fd_and_socket.take() else {
                     panic!("malformed state, {self:?}")

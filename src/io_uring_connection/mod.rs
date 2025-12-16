@@ -1,11 +1,13 @@
 use crate::Message;
 use anyhow::Result;
-use io_uring::{cqueue::Entry as Cqe, squeue::Entry as Sqe};
+pub use cqe::Cqe;
 use io_uring_auth_fsm::IoUringAuthFSM;
 use io_uring_connect_fsm::IoUringConnectFSM;
 use io_uring_reader_writer_fsm::IoUringReaderWriterFSM;
+pub use sqe::Sqe;
 
 mod buffered_reader_fsm;
+mod cqe;
 mod io_uring_auth_fsm;
 mod io_uring_connect_fsm;
 mod io_uring_reader_writer_fsm;

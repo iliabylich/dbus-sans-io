@@ -20,7 +20,7 @@ pub use poll_connection::PollConnection;
 #[cfg(feature = "io-uring")]
 mod io_uring_connection;
 #[cfg(feature = "io-uring")]
-pub use io_uring_connection::IoUringConnection;
+pub use io_uring_connection::{Cqe, IoUringConnection, Sqe};
 
 pub use types::{CompleteType, Message, Value};
 pub mod messages;

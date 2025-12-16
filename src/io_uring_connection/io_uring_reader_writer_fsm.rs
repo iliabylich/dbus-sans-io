@@ -1,5 +1,5 @@
 use crate::{
-    Message,
+    Cqe, Message, Sqe,
     encoders::MessageEncoder,
     fsm::WriterFSM,
     io_uring_connection::{
@@ -9,7 +9,6 @@ use crate::{
     serial::Serial,
 };
 use anyhow::Result;
-use io_uring::{cqueue::Entry as Cqe, squeue::Entry as Sqe};
 
 #[derive(Debug)]
 pub(crate) struct IoUringReaderWriterFSM {
@@ -64,9 +63,9 @@ impl IoUringReaderWriterFSM {
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
-        match cqe.user_data() {
+        match cqe.user_data {
             data if data == self.write_user_data => {
-                let written = cqe.result();
+                let written = cqe.result;
                 assert!(written >= 0);
                 let written = written as usize;
 
@@ -75,7 +74,7 @@ impl IoUringReaderWriterFSM {
             }
 
             data if data == self.read_user_data => {
-                let read = cqe.result();
+                let read = cqe.result;
                 assert!(read >= 0);
                 let read = read as usize;
 

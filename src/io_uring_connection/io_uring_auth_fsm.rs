@@ -1,12 +1,11 @@
 use crate::{
-    Message,
+    Cqe, Message, Sqe,
     encoders::MessageEncoder,
     fsm::{AuthFSM, AuthWants},
     io_uring_connection::sqe::{read_sqe, write_sqe},
     serial::Serial,
 };
 use anyhow::Result;
-use io_uring::{cqueue::Entry as Cqe, squeue::Entry as Sqe};
 
 pub(crate) struct IoUringAuthFSM {
     pub(crate) fd: i32,
@@ -50,11 +49,10 @@ impl IoUringAuthFSM {
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<()>> {
-        match cqe.user_data() {
+        match cqe.user_data {
             data if data == self.write_user_data => {
-                let written = cqe.result();
-                assert!(written >= 0);
-                let written = written as usize;
+                assert!(cqe.result >= 0);
+                let written = cqe.result as usize;
 
                 if let Some(_guid) = self.auth.satisfy_write(written)? {
                     return Ok(Some(()));
@@ -63,9 +61,8 @@ impl IoUringAuthFSM {
             }
 
             data if data == self.read_user_data => {
-                let read = cqe.result();
-                assert!(read >= 0);
-                let read = read as usize;
+                assert!(cqe.result >= 0);
+                let read = cqe.result as usize;
 
                 self.auth.satisfy_read(read)?;
                 Ok(None)

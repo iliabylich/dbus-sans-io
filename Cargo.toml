@@ -11,7 +11,8 @@ libc = { version = "0.2", optional = true }
 [features]
 blocking = []
 poll = ["dep:libc"]
-io-uring = ["dep:io-uring", "dep:libc"]
+io-uring = ["dep:libc"]
+io-uring-with-dep = ["io-uring", "dep:io-uring"]
 
 [[bin]]
 name = "blocking"
@@ -32,4 +33,4 @@ name = "io-uring"
 test = false
 bench = false
 path = "bin/session.rs"
-required-features = ["io-uring"]
+required-features = ["io-uring-with-dep"]

@@ -1,30 +1,68 @@
-use io_uring::{opcode, squeue::Entry as Sqe, types};
 use libc::{AF_UNIX, SOCK_STREAM, sockaddr, sockaddr_un};
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum Sqe {
+    Socket {
+        domain: i32,
+        socket_type: i32,
+        protocol: i32,
+        user_data: u64,
+    },
+
+    Connect {
+        fd: i32,
+        addr: *const sockaddr,
+        addrlen: u32,
+        user_data: u64,
+    },
+
+    Write {
+        fd: i32,
+        buf: *const u8,
+        len: u32,
+        user_data: u64,
+    },
+
+    Read {
+        fd: i32,
+        buf: *mut u8,
+        len: u32,
+        user_data: u64,
+    },
+}
+
 pub(crate) fn socket_sqe(user_data: u64) -> Sqe {
-    opcode::Socket::new(AF_UNIX, SOCK_STREAM, 0)
-        .build()
-        .user_data(user_data)
+    Sqe::Socket {
+        domain: AF_UNIX,
+        socket_type: SOCK_STREAM,
+        protocol: 0,
+        user_data,
+    }
 }
 
 pub(crate) fn connect_sqe(fd: i32, addr: *const sockaddr_un, user_data: u64) -> Sqe {
-    opcode::Connect::new(
-        types::Fd(fd),
-        addr.cast::<sockaddr>(),
-        std::mem::size_of::<sockaddr_un>() as u32,
-    )
-    .build()
-    .user_data(user_data)
+    Sqe::Connect {
+        fd,
+        addr: addr.cast::<sockaddr>(),
+        addrlen: std::mem::size_of::<sockaddr_un>() as u32,
+        user_data,
+    }
 }
 
 pub(crate) fn write_sqe(fd: i32, buf: &[u8], user_data: u64) -> Sqe {
-    opcode::Write::new(types::Fd(fd), buf.as_ptr(), buf.len() as u32)
-        .build()
-        .user_data(user_data)
+    Sqe::Write {
+        fd,
+        buf: buf.as_ptr(),
+        len: buf.len() as u32,
+        user_data,
+    }
 }
 
 pub(crate) fn read_sqe(fd: i32, buf: &mut [u8], user_data: u64) -> Sqe {
-    opcode::Read::new(types::Fd(fd), buf.as_mut_ptr(), buf.len() as u32)
-        .build()
-        .user_data(user_data)
+    Sqe::Read {
+        fd,
+        buf: buf.as_mut_ptr(),
+        len: buf.len() as u32,
+        user_data,
+    }
 }
