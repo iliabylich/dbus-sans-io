@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::Message;
 use anyhow::Result;
 pub use cqe::Cqe;
@@ -6,7 +8,6 @@ use io_uring_connect_fsm::IoUringConnectFSM;
 use io_uring_reader_writer_fsm::IoUringReaderWriterFSM;
 pub use sqe::Sqe;
 
-mod buffered_reader_fsm;
 mod cqe;
 mod io_uring_auth_fsm;
 mod io_uring_connect_fsm;
@@ -27,6 +28,8 @@ pub struct IoUringConnection {
     write_user_data: u64,
 
     fsm: IoUringFSM,
+
+    pending: HashSet<u64>,
 }
 
 impl IoUringConnection {
@@ -41,6 +44,8 @@ impl IoUringConnection {
             write_user_data,
 
             fsm: IoUringFSM::Connect(IoUringConnectFSM::new(socket_user_data, connect_user_data)),
+
+            pending: HashSet::new(),
         }
     }
 
@@ -53,13 +58,24 @@ impl IoUringConnection {
         }
     }
 
-    pub fn next_sqe(&mut self) -> Option<Sqe> {
-        match &mut self.fsm {
-            IoUringFSM::Connect(connector) => Some(connector.next_sqe()),
-            IoUringFSM::Auth(auth) => Some(auth.next_sqe()),
+    pub fn next_sqe(&mut self) -> [Option<Sqe>; 2] {
+        let mut sqes = match &mut self.fsm {
+            IoUringFSM::Connect(connector) => [Some(connector.next_sqe()), None],
+            IoUringFSM::Auth(auth) => [Some(auth.next_sqe()), None],
             IoUringFSM::ReaderWriter(rw) => rw.next_sqe(),
             IoUringFSM::None => unreachable!(),
+        };
+
+        for slot in sqes.iter_mut() {
+            if let Some(sqe) = *slot {
+                let is_new = self.pending.insert(sqe.user_data());
+                if !is_new {
+                    *slot = None
+                }
+            }
         }
+
+        sqes
     }
 
     fn take_fsm(&mut self) -> IoUringFSM {
@@ -67,6 +83,8 @@ impl IoUringConnection {
     }
 
     pub fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
+        self.pending.remove(&cqe.user_data);
+
         match &mut self.fsm {
             IoUringFSM::Connect(connector) => match connector.process_cqe(cqe)? {
                 Some(fd) => {

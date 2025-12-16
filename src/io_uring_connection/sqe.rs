@@ -1,6 +1,6 @@
 use libc::{AF_UNIX, SOCK_STREAM, sockaddr, sockaddr_un};
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Sqe {
     Socket {
         domain: i32,
@@ -29,6 +29,17 @@ pub enum Sqe {
         len: u32,
         user_data: u64,
     },
+}
+
+impl Sqe {
+    pub(crate) fn user_data(self) -> u64 {
+        match self {
+            Self::Socket { user_data, .. }
+            | Self::Connect { user_data, .. }
+            | Self::Write { user_data, .. }
+            | Self::Read { user_data, .. } => user_data,
+        }
+    }
 }
 
 pub(crate) fn socket_sqe(user_data: u64) -> Sqe {

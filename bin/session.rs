@@ -256,7 +256,7 @@ fn main() -> Result<()> {
     }
 
     loop {
-        if let Some(sqe) = conn.next_sqe() {
+        for sqe in conn.next_sqe().into_iter().filter_map(|e| e) {
             unsafe { ring.submission().push(&map_sqe(sqe))? };
         }
 

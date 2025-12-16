@@ -1,11 +1,8 @@
 use crate::{
     Cqe, Message, Sqe,
     encoders::MessageEncoder,
-    fsm::WriterFSM,
-    io_uring_connection::{
-        buffered_reader_fsm::BufferedReaderFSM,
-        sqe::{read_sqe, write_sqe},
-    },
+    fsm::{ReaderFSM, WriterFSM},
+    io_uring_connection::sqe::{read_sqe, write_sqe},
     serial::Serial,
 };
 use anyhow::Result;
@@ -14,7 +11,7 @@ use anyhow::Result;
 pub(crate) struct IoUringReaderWriterFSM {
     fd: i32,
     serial: Serial,
-    reader: BufferedReaderFSM,
+    reader: ReaderFSM,
     writer: WriterFSM,
     read_user_data: u64,
     write_user_data: u64,
@@ -36,7 +33,7 @@ impl IoUringReaderWriterFSM {
         Self {
             fd,
             serial,
-            reader: BufferedReaderFSM::new(),
+            reader: ReaderFSM::new(),
             writer,
             read_user_data,
             write_user_data,
@@ -50,16 +47,17 @@ impl IoUringReaderWriterFSM {
         Ok(())
     }
 
-    pub(crate) fn next_sqe(&mut self) -> Option<Sqe> {
+    pub(crate) fn next_sqe(&mut self) -> [Option<Sqe>; 2] {
+        let mut out = [None; 2];
+
+        let buf = self.reader.wants();
+        out[0] = Some(read_sqe(self.fd, buf, self.read_user_data));
+
         if let Some(buf) = self.writer.wants() {
-            return Some(write_sqe(self.fd, buf, self.write_user_data));
+            out[1] = Some(write_sqe(self.fd, buf, self.write_user_data));
         }
 
-        if let Some(buf) = self.reader.wants() {
-            return Some(read_sqe(self.fd, buf, self.read_user_data));
-        }
-
-        None
+        out
     }
 
     pub(crate) fn process_cqe(&mut self, cqe: Cqe) -> Result<Option<Message>> {
