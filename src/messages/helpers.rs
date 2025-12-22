@@ -90,7 +90,7 @@ macro_rules! type_is {
 macro_rules! define_sum_message {
     ($name:ident, $($variant:ident),+) => {
         #[derive(Debug)]
-        enum $name<'a> {
+        pub(crate) enum $name<'a> {
             $($variant($variant<'a>)),+
         }
 
